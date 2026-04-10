@@ -15,10 +15,12 @@ export function generateInviteCode(length = 8) {
 }
 
 /**
- * Format a date+time string to Colombia time (UTC-5)
+ * Format a date+time string to Colombia time (UTC-5).
+ * Assumes dateStr is "YYYY-MM-DD" and timeStr is "HH:MM" in UTC.
  */
 export function formatColombiaTime(dateStr, timeStr = '00:00') {
   if (!dateStr) return '';
+  // Combine date and time as UTC (appending 'Z')
   const dateTime = new Date(`${dateStr}T${timeStr}:00Z`);
   return dateTime.toLocaleString('es-CO', {
     timeZone: 'America/Bogota',

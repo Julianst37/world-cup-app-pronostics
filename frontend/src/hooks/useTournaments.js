@@ -10,8 +10,8 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   serverTimestamp,
-  arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from './useAuth';
@@ -121,10 +121,7 @@ export function useTournaments() {
         where('inviteCode', '==', inviteCode)
       );
 
-      const snapshot = await new Promise((resolve, reject) => {
-        const unsub = onSnapshot(q, resolve, reject);
-        return unsub;
-      });
+      const snapshot = await getDocs(q);
 
       if (snapshot.empty) throw new Error('Tournament not found');
 
@@ -137,10 +134,7 @@ export function useTournaments() {
         where('tournamentId', '==', tournament.id)
       );
 
-      const existingParticipant = await new Promise((resolve, reject) => {
-        const unsub = onSnapshot(participantQ, resolve, reject);
-        return unsub;
-      });
+      const existingParticipant = await getDocs(participantQ);
 
       if (!existingParticipant.empty) throw new Error('Already a participant');
 

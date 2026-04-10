@@ -123,9 +123,9 @@ async function seedUsers() {
   }
 
   console.log('\n✅ User seeding complete!');
-  console.log('\nTest credentials:');
+  console.log('\nTest users created (see .env.example for passwords):');
   TEST_USERS.forEach((u) => {
-    console.log(`  ${u.email} / ${u.password}`);
+    console.log(`  ${u.email}`);
   });
   process.exit(0);
 }
