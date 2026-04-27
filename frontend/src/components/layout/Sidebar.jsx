@@ -1,4 +1,5 @@
 import { NavLink, useParams } from 'react-router-dom';
+import { Home, ClipboardList, Trophy, Users, Settings } from 'lucide-react';
 
 export default function Sidebar({ tournamentId }) {
   const params = useParams();
@@ -7,11 +8,11 @@ export default function Sidebar({ tournamentId }) {
   if (!tid) return null;
 
   const links = [
-    { to: `/tournaments/${tid}/home`, label: 'Home', icon: '🏠' },
-    { to: `/tournaments/${tid}/predictions`, label: 'Pronósticos', icon: '⚽' },
-    { to: `/tournaments/${tid}/standings`, label: 'Posiciones', icon: '🏆' },
-    { to: `/tournaments/${tid}/participants`, label: 'Participantes', icon: '👥' },
-    { to: `/tournaments/${tid}/settings`, label: 'Configuración', icon: '⚙️' },
+    { to: `/tournaments/${tid}/home`, label: 'Inicio', Icon: Home },
+    { to: `/tournaments/${tid}/predictions`, label: 'Pronósticos', Icon: ClipboardList },
+    { to: `/tournaments/${tid}/standings`, label: 'Posiciones', Icon: Trophy },
+    { to: `/tournaments/${tid}/participants`, label: 'Participantes', Icon: Users },
+    { to: `/tournaments/${tid}/settings`, label: 'Configuración', Icon: Settings },
   ];
 
   return (
@@ -28,7 +29,7 @@ export default function Sidebar({ tournamentId }) {
             }`
           }
         >
-          <span className="text-lg">{link.icon}</span>
+          <link.Icon className="w-5 h-5" />
           {link.label}
         </NavLink>
       ))}

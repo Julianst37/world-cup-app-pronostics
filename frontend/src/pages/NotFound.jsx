@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
+import { CircleDot } from 'lucide-react';
 
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-center p-6">
-      <div className="text-7xl mb-6">⚽</div>
+      <CircleDot className="w-20 h-20 text-gray-400 mb-6" />
       <h1 className="text-6xl font-black text-gray-800 mb-4">404</h1>
       <h2 className="text-2xl font-bold text-gray-600 mb-2">Página no encontrada</h2>
       <p className="text-gray-500 mb-8">

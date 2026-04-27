@@ -12,6 +12,8 @@ import {
   getDoc,
   getDocs,
   serverTimestamp,
+  increment,
+  getCountFromServer,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from './useAuth';
@@ -51,9 +53,25 @@ export function useTournaments() {
           tournamentIds.map((id) => getDoc(doc(db, 'tournaments', id)))
         );
 
-        const data = tournamentDocs
-          .filter((d) => d.exists())
-          .map((d) => ({ id: d.id, ...d.data() }));
+        const existingDocs = tournamentDocs.filter((d) => d.exists());
+
+        const participantCounts = await Promise.all(
+          existingDocs.map((d) =>
+            getCountFromServer(
+              query(
+                collection(db, 'participants'),
+                where('tournamentId', '==', d.id),
+                where('status', '==', 'active')
+              )
+            )
+          )
+        );
+
+        const data = existingDocs.map((d, i) => ({
+          id: d.id,
+          ...d.data(),
+          memberCount: participantCounts[i].data().count,
+        }));
 
         setTournaments(data);
         setLoading(false);
@@ -77,6 +95,8 @@ export function useTournaments() {
         adminId: currentUser.uid,
         inviteCode,
         memberCount: 1,
+        secondRoundMultiplier: tournamentData.secondRoundMultiplier || 2,
+        predictionLockMinutes: tournamentData.predictionLockMinutes || 10,
         pointConfig: tournamentData.pointConfig || {
           exact: 3,
           difference: 2,
@@ -123,7 +143,7 @@ export function useTournaments() {
 
       const snapshot = await getDocs(q);
 
-      if (snapshot.empty) throw new Error('Tournament not found');
+      if (snapshot.empty) throw new Error('El torneo no existe, por favor verifica el código de invitación e intenta nuevamente');
 
       const tournament = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
 
@@ -136,7 +156,7 @@ export function useTournaments() {
 
       const existingParticipant = await getDocs(participantQ);
 
-      if (!existingParticipant.empty) throw new Error('Already a participant');
+      if (!existingParticipant.empty) throw new Error('Ya eres participante de este torneo');
 
       const status = tournament.requiresApproval ? 'pending' : 'active';
 
@@ -148,6 +168,32 @@ export function useTournaments() {
         role: 'member',
         joinedAt: serverTimestamp(),
       });
+
+      // Incrementar memberCount solo si se une directamente (sin aprobación)
+      if (!tournament.requiresApproval) {
+        await updateDoc(doc(db, 'tournaments', tournament.id), {
+          memberCount: increment(1),
+        });
+      }
+
+      // Crear notificación para el admin si requiere aprobación
+      if (tournament.requiresApproval) {
+        const adminNotificationRef = collection(db, 'notifications');
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const userData = userDoc.data();
+
+        await addDoc(adminNotificationRef, {
+          adminId: tournament.adminId,
+          tournamentId: tournament.id,
+          tournamentName: tournament.name,
+          userId: currentUser.uid,
+          userName: userData?.displayName || currentUser.email,
+          type: 'pending_approval',
+          read: false,
+          createdAt: serverTimestamp(),
+          redirectUrl: `/tournaments/${tournament.id}/participants`
+        });
+      }
 
       return tournament;
     },
@@ -163,6 +209,50 @@ export function useTournaments() {
     return null;
   }, []);
 
+    const fetchTournaments = useCallback(async () => {
+    if (!currentUser) return;
+
+    const q = query(
+      collection(db, 'participants'),
+      where('userId', '==', currentUser.uid),
+      where('status', '==', 'active')
+    );
+
+    const snapshot = await getDocs(q);
+    const tournamentIds = snapshot.docs.map((d) => d.data().tournamentId);
+
+    if (tournamentIds.length === 0) {
+      setTournaments([]);
+      return;
+    }
+
+    const tournamentDocs = await Promise.all(
+      tournamentIds.map((id) => getDoc(doc(db, 'tournaments', id)))
+    );
+
+    const existingDocs = tournamentDocs.filter((d) => d.exists());
+
+    const participantCounts = await Promise.all(
+      existingDocs.map((d) =>
+        getCountFromServer(
+          query(
+            collection(db, 'participants'),
+            where('tournamentId', '==', d.id),
+            where('status', '==', 'active')
+          )
+        )
+      )
+    );
+
+    const data = existingDocs.map((d, i) => ({
+      id: d.id,
+      ...d.data(),
+      memberCount: participantCounts[i].data().count,
+    }));
+
+    setTournaments(data);
+  }, [currentUser]);
+
   return {
     tournaments,
     loading,
@@ -172,6 +262,7 @@ export function useTournaments() {
     deleteTournament,
     joinTournament,
     getTournament,
+    fetchTournaments
   };
 }
 

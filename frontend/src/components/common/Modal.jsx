@@ -1,47 +1,34 @@
-import { useEffect } from 'react';
-
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }) {
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const sizes = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-xl',
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold text-gray-800">{title}</h2>
-          <button
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ marginTop: 0 }}>
+          <div
+            className="absolute inset-0 bg-black bg-opacity-50"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none transition"
+          ></div>
+
+          <div
+            className={`relative bg-white rounded-2xl shadow-xl z-10 ${
+              size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-md'
+            }`}
           >
-            ×
-          </button>
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-bold text-gray-800">{title}</h2>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-4 text-center">
+              {children}
+            </div>
+          </div>
         </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }

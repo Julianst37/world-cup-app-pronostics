@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, NavLink, Outlet, Navigate } from 'react-router-dom';
+import { useParams, NavLink, Outlet, Navigate, Link } from 'react-router-dom';
 import { useTournaments } from '../../hooks/useTournaments';
 import { useAuth } from '../../contexts/AuthContext';
 import Loading from '../common/Loading';
 import Error from '../common/Error';
+import { Home, ClipboardList, Trophy, Users, Settings } from 'lucide-react';
 
 export default function TournamentDetail() {
   const { tournamentId } = useParams();
@@ -32,19 +33,19 @@ export default function TournamentDetail() {
   if (error) return <Error message={error} />;
 
   const tabs = [
-    { to: 'home', label: 'Home', icon: '🏠' },
-    { to: 'predictions', label: 'Pronósticos', icon: '⚽' },
-    { to: 'standings', label: 'Posiciones', icon: '🏆' },
-    { to: 'participants', label: 'Participantes', icon: '👥' },
+    { to: 'home', label: 'Inicio', Icon: Home },
+    { to: 'predictions', label: 'Pronósticos', Icon: ClipboardList },
+    { to: 'standings', label: 'Posiciones', Icon: Trophy },
+    { to: 'participants', label: 'Participantes', Icon: Users },
     ...(tournament?.adminId === currentUser?.uid
-      ? [{ to: 'settings', label: 'Configuración', icon: '⚙️' }]
+      ? [{ to: 'settings', label: 'Configuración', Icon: Settings }]
       : []),
   ];
 
   return (
     <div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-4 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-800 to-indigo-700 p-6 text-white">
+        <div className="bg-gradient-to-r from-blue-800 to-indigo-700 p-6 text-white text-center">
           <h1 className="text-2xl font-bold">{tournament?.name}</h1>
           {tournament?.description && (
             <p className="text-blue-200 mt-1 text-sm">{tournament.description}</p>
@@ -64,7 +65,7 @@ export default function TournamentDetail() {
                 }`
               }
             >
-              <span>{tab.icon}</span>
+              <tab.Icon className="w-4 h-4" />
               {tab.label}
             </NavLink>
           ))}

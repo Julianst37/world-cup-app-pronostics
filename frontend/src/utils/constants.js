@@ -4,6 +4,11 @@
 
 export const APP_NAME = 'Mundial 2026 Pronósticos';
 
+export const SUPER_ADMIN_EMAIL = 'admin@worldcup2026.com';
+
+export const PLATFORM_COLLECTION = 'platform';
+export const PLATFORM_SETTINGS_DOC = 'settings';
+
 export const ROUNDS = {
   GROUP_STAGE: 'Group Stage',
   ROUND_OF_32: 'Round of 32',
@@ -12,6 +17,24 @@ export const ROUNDS = {
   SEMI_FINAL: 'Semi Final',
   THIRD_PLACE: 'Third Place',
   FINAL: 'Final',
+};
+
+export const PLAYOFF_ROUNDS = [
+  ROUNDS.ROUND_OF_32,
+  ROUNDS.ROUND_OF_16,
+  ROUNDS.QUARTER_FINAL,
+  ROUNDS.SEMI_FINAL,
+  ROUNDS.THIRD_PLACE,
+  ROUNDS.FINAL,
+];
+
+export const DEFAULT_GLOBAL_ROUND_SETTINGS = {
+  [ROUNDS.ROUND_OF_32]: false,
+  [ROUNDS.ROUND_OF_16]: false,
+  [ROUNDS.QUARTER_FINAL]: false,
+  [ROUNDS.SEMI_FINAL]: false,
+  [ROUNDS.THIRD_PLACE]: false,
+  [ROUNDS.FINAL]: false,
 };
 
 export const MATCH_STATUS = {

@@ -1,100 +1,113 @@
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMatches } from '../../hooks/useMatches';
 import { usePredictions } from '../../hooks/usePredictions';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { Trophy, BarChart3, Users, Link2, Copy, Check } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
+import toast from 'react-hot-toast';
 
 export default function TournamentHome() {
   const { tournament } = useOutletContext();
   const { currentUser, userProfile } = useAuth();
-  const { matches } = useMatches({ status: 'scheduled' });
-  const { predictions } = usePredictions(tournament?.id);
+  const { matches, loading: matchesLoading } = useMatches();
+  const { predictions, loading: predictionsLoading } = usePredictions(tournament?.id);
+  const [activeParticipants, setActiveParticipants] = useState(null);
+  const [participantsLoading, setParticipantsLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
-  const now = new Date();
-  const nextMatch = matches.find((m) => new Date(m.date) >= now);
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(tournament.inviteCode);
+    setCopied(true);
+    toast.success('Código copiado');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  useEffect(() => {
+    if (!tournament?.id) {
+      setActiveParticipants(null);
+      setParticipantsLoading(false);
+      return;
+    }
+
+    setParticipantsLoading(true);
+    const q = query(
+      collection(db, 'participants'),
+      where('tournamentId', '==', tournament.id),
+      where('status', '==', 'active')
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setActiveParticipants(snap.size);
+      setParticipantsLoading(false);
+    });
+
+    return unsub;
+  }, [tournament?.id]);
+
   const completedMatches = matches.filter((m) => m.status === 'finished').length;
   const totalPoints = predictions.reduce((sum, p) => sum + (p.points || 0), 0);
 
   const stats = [
-    { label: 'Partidos jugados', value: completedMatches, icon: '⚽' },
-    { label: 'Tus puntos', value: totalPoints, icon: '🏆' },
-    { label: 'Tus pronósticos', value: predictions.length, icon: '📊' },
-    { label: 'Participantes', value: tournament?.memberCount || 1, icon: '👥' },
+    { label: 'Partidos jugados', value: matchesLoading ? null : completedMatches, Icon: FaFutbol },
+    { label: 'Tus puntos', value: predictionsLoading ? null : totalPoints, Icon: Trophy },
+    { label: 'Tus pronósticos', value: predictionsLoading ? null : predictions.length, Icon: BarChart3 },
+    { label: 'Participantes', value: participantsLoading ? null : activeParticipants, Icon: Users },
   ];
 
   return (
     <div className="space-y-6">
       {/* Tournament Header */}
       <div className="bg-gradient-to-br from-blue-900 to-indigo-800 rounded-2xl p-8 text-white text-center">
-        <div className="text-6xl mb-4">🌍⚽🌎</div>
-        <h2 className="text-3xl font-bold mb-2">{tournament?.name}</h2>
-        {tournament?.description && (
-          <p className="text-blue-200 text-lg">{tournament.description}</p>
-        )}
-        <p className="text-blue-300 text-sm mt-3">FIFA World Cup 2026™</p>
+        <img
+          src="https://cdn.worldvectorlogo.com/logos/mundial-2026-world-cup.svg"
+          alt="FIFA World Cup 2026"
+          className="w-24 h-24 mx-auto mb-4 drop-shadow-lg"
+        />
+        <p className="text-blue-300 text-sm">FIFA World Cup 2026™</p>
       </div>
 
       {/* Welcome message */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <p className="text-gray-700 text-lg">
-          👋 Bienvenido, <span className="font-semibold">{userProfile?.displayName || currentUser?.email}</span>
-        </p>
-        <p className="text-gray-500 text-sm mt-1">
-          Haz tus predicciones antes de cada partido para acumular puntos.
-        </p>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="p-5">
+          <p className="text-gray-700 text-lg">
+            Bienvenido, <span className="font-semibold">{userProfile?.displayName || currentUser?.email}</span>
+          </p>
+          <p className="text-gray-500 text-sm mt-1">
+            Haz tus predicciones antes de cada partido para acumular puntos.
+          </p>
+        </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map((stat) => (
           <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-            <div className="text-3xl mb-2">{stat.icon}</div>
-            <div className="text-2xl font-bold text-gray-800">{stat.value}</div>
+            <stat.Icon className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <div className="text-2xl font-bold text-gray-800">
+              {stat.value === null ? <span className="text-gray-300">—</span> : stat.value}
+            </div>
             <div className="text-xs text-gray-500 mt-1">{stat.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Next Match */}
-      {nextMatch && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-700 mb-3">⏰ Próximo partido</h3>
-          <div className="flex items-center justify-between">
-            <div className="text-center flex-1">
-              {nextMatch.homeTeamFlag && (
-                <img src={nextMatch.homeTeamFlag} alt="" className="w-8 h-6 mx-auto mb-1 rounded" />
-              )}
-              <span className="font-medium text-gray-800">{nextMatch.homeTeam}</span>
-            </div>
-            <div className="text-center px-4">
-              <div className="text-2xl font-bold text-gray-400">VS</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {new Date(nextMatch.date).toLocaleDateString('es-CO', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}{' '}
-                {nextMatch.time}
-              </div>
-            </div>
-            <div className="text-center flex-1">
-              {nextMatch.awayTeamFlag && (
-                <img src={nextMatch.awayTeamFlag} alt="" className="w-8 h-6 mx-auto mb-1 rounded" />
-              )}
-              <span className="font-medium text-gray-800">{nextMatch.awayTeam}</span>
-            </div>
-          </div>
-          {nextMatch.stadium && (
-            <p className="text-xs text-gray-500 text-center mt-3">📍 {nextMatch.stadium}</p>
-          )}
-        </div>
-      )}
-
       {/* Invite code */}
       {tournament?.inviteCode && (
         <div className="bg-blue-50 rounded-xl border border-blue-200 p-5">
-          <h3 className="font-semibold text-blue-800 mb-1">🔗 Invita a tus amigos</h3>
+          <h3 className="font-semibold text-blue-800 mb-1 flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Invita a tus amigos</h3>
           <p className="text-sm text-blue-600 mb-2">Comparte este código para unirse al torneo:</p>
-          <code className="text-blue-900 font-mono font-bold text-xl">{tournament.inviteCode}</code>
+          <button
+            onClick={handleCopyCode}
+            className="flex items-center gap-2 bg-white border border-blue-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg px-4 py-2 transition group"
+          >
+            <code className="text-blue-900 font-mono font-bold text-xl tracking-widest">{tournament.inviteCode}</code>
+            {copied
+              ? <Check className="w-4 h-4 text-green-500" />
+              : <Copy className="w-4 h-4 text-blue-400 group-hover:text-blue-600" />}
+          </button>
         </div>
       )}
     </div>

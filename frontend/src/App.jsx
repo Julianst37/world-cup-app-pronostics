@@ -10,10 +10,13 @@ import Loading from './components/common/Loading';
 // Lazy-loaded pages
 const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./components/auth/Login'));
+const ResetPassword = lazy(() => import('./components/auth/ResetPassword'));
 const SignUp = lazy(() => import('./components/auth/SignUp'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+
 
 // Tournament components
 const CreateTournament = lazy(() => import('./components/tournaments/CreateTournament'));
@@ -24,6 +27,7 @@ const PredictionsList = lazy(() => import('./components/tournaments/PredictionsL
 const Standings = lazy(() => import('./components/tournaments/Standings'));
 const Participants = lazy(() => import('./components/tournaments/Participants'));
 const MatchDetail = lazy(() => import('./components/tournaments/MatchDetail'));
+const AdminTournament = lazy(() => import('./components/tournaments/AdminTournament'));
 
 function AppRoutes() {
   return (
@@ -32,6 +36,7 @@ function AppRoutes() {
         {/* Public routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/auth/login" element={<Login />} />
+        <Route path="/auth/reset-password" element={<ResetPassword />} />
         <Route path="/auth/signup" element={<SignUp />} />
 
         {/* Protected routes */}
@@ -52,6 +57,28 @@ function AppRoutes() {
             <PrivateRoute>
               <Layout>
                 <ProfilePage />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/notifications"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <Notifications />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/admin/matches"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <AdminTournament />
               </Layout>
             </PrivateRoute>
           }

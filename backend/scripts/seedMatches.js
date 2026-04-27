@@ -28,18 +28,18 @@ const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 // Fallback match data for World Cup 2026 (104 matches)
 const generateFallbackMatches = () => {
   const teams = {
-    A: ['Mexico', 'USA', 'Canada', 'TBD'],
-    B: ['Argentina', 'Ecuador', 'Chile', 'Peru'],
-    C: ['Brazil', 'Colombia', 'Venezuela', 'Bolivia'],
-    D: ['Germany', 'Netherlands', 'Belgium', 'Denmark'],
-    E: ['France', 'Spain', 'Portugal', 'Switzerland'],
-    F: ['England', 'Italy', 'Croatia', 'Ukraine'],
-    G: ['Japan', 'South Korea', 'Australia', 'Saudi Arabia'],
-    H: ['Morocco', 'Senegal', 'Tunisia', 'Egypt'],
-    I: ['Uruguay', 'Paraguay', 'Ecuador', 'TBD'],
-    J: ['Poland', 'Czech Republic', 'Slovakia', 'Hungary'],
-    K: ['Serbia', 'Romania', 'Turkey', 'Albania'],
-    L: ['Iran', 'Qatar', 'Iraq', 'UAE'],
+    A: ['Mexico', 'Sudáfrica', 'República de Corea', 'República Checa'],
+    B: ['Canadá', 'Bosnia y Herzegovina', 'EE. UU.', 'Paraguay'],
+    C: ['Catar', 'Suiza', 'Brasil', 'Marruecos'],
+    D: ['Haití', 'Escocia', 'Australia', 'Turquía'],
+    E: ['Alemania', 'Curazao', 'Costa de Marfil', 'Ecuador'],
+    F: ['Países Bajos', 'Japón', 'Suecia', 'Túnez'],
+    G: ['Bélgica', 'Egipto', 'Irán', 'Nueva Zelanda'],
+    H: ['España', 'Cabo Verde', 'Arabia Saudita', 'Uruguay'],
+    I: ['Francia', 'Senegal', 'Irak', 'Noruega'],
+    J: ['Argentina', 'Argelia', 'Austria', 'Jordania'],
+    K: ['Portugal', 'RD Congo', 'Uzbekistán', 'Colombia'],
+    L: ['Inglaterra', 'Croacia', 'Ghana', 'Panamá'],
   };
 
   const stadiums = [
@@ -216,32 +216,151 @@ const generateFallbackMatches = () => {
 
 function getCountryCode(teamName) {
   const codes = {
-    Mexico: 'mx', USA: 'us', Canada: 'ca',
-    Argentina: 'ar', Ecuador: 'ec', Chile: 'cl', Peru: 'pe',
-    Brazil: 'br', Colombia: 'co', Venezuela: 've', Bolivia: 'bo',
-    Germany: 'de', Netherlands: 'nl', Belgium: 'be', Denmark: 'dk',
-    France: 'fr', Spain: 'es', Portugal: 'pt', Switzerland: 'ch',
-    England: 'gb-eng', Italy: 'it', Croatia: 'hr', Ukraine: 'ua',
-    Japan: 'jp', 'South Korea': 'kr', Australia: 'au', 'Saudi Arabia': 'sa',
-    Morocco: 'ma', Senegal: 'sn', Tunisia: 'tn', Egypt: 'eg',
-    Uruguay: 'uy', Paraguay: 'py', Poland: 'pl', 'Czech Republic': 'cz',
-    Slovakia: 'sk', Hungary: 'hu', Serbia: 'rs', Romania: 'ro',
-    Turkey: 'tr', Albania: 'al', Iran: 'ir', Qatar: 'qa', Iraq: 'iq', UAE: 'ae',
+    // En español (como vienen de la API)
+    'Mexico': 'mx',
+    'Sudáfrica': 'za',
+    'República de Corea': 'kr',
+    'República Checa': 'cz',
+    'Canadá': 'ca',
+    'Bosnia y Herzegovina': 'ba',
+    'EE. UU.': 'us',
+    'Paraguay': 'py',
+    'Catar': 'qa',
+    'Suiza': 'ch',
+    'Brasil': 'br',
+    'Marruecos': 'ma',
+    'Haití': 'ht',
+    'Escocia': 'gb-sct',
+    'Australia': 'au',
+    'Turquía': 'tr',
+    'Alemania': 'de',
+    'Curazao': 'cw',
+    'Costa de Marfil': 'ci',
+    'Ecuador': 'ec',
+    'Países Bajos': 'nl',
+    'Japón': 'jp',
+    'Suecia': 'se',
+    'Túnez': 'tn',
+    'Bélgica': 'be',
+    'Egipto': 'eg',
+    'Irán': 'ir',
+    'Nueva Zelanda': 'nz',
+    'España': 'es',
+    'Cabo Verde': 'cv',
+    'Arabia Saudita': 'sa',
+    'Uruguay': 'uy',
+    'Francia': 'fr',
+    'Senegal': 'sn',
+    'Irak': 'iq',
+    'Noruega': 'no',
+    'Argentina': 'ar',
+    'Argelia': 'dz',
+    'Austria': 'at',
+    'Jordania': 'jo',
+    'Portugal': 'pt',
+    'RD Congo': 'cd',
+    'Uzbekistán': 'uz',
+    'Colombia': 'co',
+    'Inglaterra': 'gb-eng',
+    'Croacia': 'hr',
+    'Ghana': 'gh',
+    'Panamá': 'pa',
+    
+    // En inglés (por si acaso la API devuelve algunos en inglés)
+    'Mexico': 'mx',
+    'South Africa': 'za',
+    'Korea Republic': 'kr',
+    'Czechia': 'cz',
+    'Canada': 'ca',
+    'Bosnia-Herzegovina': 'ba',
+    'USA': 'us',
+    'Paraguay': 'py',
+    'Qatar': 'qa',
+    'Switzerland': 'ch',
+    'Brazil': 'br',
+    'Morocco': 'ma',
+    'Haiti': 'ht',
+    'Scotland': 'gb-sct',
+    'Australia': 'au',
+    'Turkey': 'tr',
+    'Germany': 'de',
+    'Curaçao': 'cw',
+    'Ivory Coast': 'ci',
+    'Côte d\'Ivoire': 'ci',
+    'Cote d\'Ivoire': 'ci',
+    'Ecuador': 'ec',
+    'Netherlands': 'nl',
+    'Japan': 'jp',
+    'Sweden': 'se',
+    'Tunisia': 'tn',
+    'Belgium': 'be',
+    'Egypt': 'eg',
+    'IR Iran': 'ir',
+    'New Zealand': 'nz',
+    'Spain': 'es',
+    'Cabo Verde': 'cv',
+    'Saudi Arabia': 'sa',
+    'Uruguay': 'uy',
+    'France': 'fr',
+    'Senegal': 'sn',
+    'Iraq': 'iq',
+    'Norway': 'no',
+    'Argentina': 'ar',
+    'Algeria': 'dz',
+    'Austria': 'at',
+    'Jordan': 'jo',
+    'Portugal': 'pt',
+    'Congo DR': 'cd',
+    'Uzbekistan': 'uz',
+    'Colombia': 'co',
+    'England': 'gb-eng',
+    'Croatia': 'hr',
+    'Ghana': 'gh',
+    'Panama': 'pa',
   };
+  
   return codes[teamName] || 'xx';
 }
 
 async function fetchMatchesFromAPI() {
-  try {
+   try {
     console.log('Fetching matches from API...');
     const response = await axios.get(`${API_URL}/matches`, {
       headers: {
-        Authorization: `Bearer ${API_TOKEN}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${API_TOKEN}`
       },
       timeout: 10000,
     });
-    return response.data;
+
+    // Convertir UTC a hora colombiana (UTC-5)
+     const matchesWithMapping = response.data.map((match, index) => {
+      const utcDate = new Date(match.kickoff_utc);
+      
+      // Convertir a hora colombiana (UTC-5)
+      const colombiaDate = new Date(utcDate.getTime() - (5 * 60 * 60 * 1000));
+      
+      // Convertir código ISO a código flagcdn
+      const homeTeamFlag = getCountryCode(match.home_team);
+      const awayTeamFlag = getCountryCode(match.away_team);
+
+      return {
+        id: match.id || `match_${index}`,
+        matchId: match.id || `match_${index}`,
+        homeTeam: match.home_team,
+        awayTeam: match.away_team,
+        homeTeamFlag: `https://flagcdn.com/w40/${homeTeamFlag}.png`,
+        awayTeamFlag: `https://flagcdn.com/w40/${awayTeamFlag}.png`,
+        date: colombiaDate.toISOString(),
+        stadium: match.stadium,
+        group: match.group_name || null,
+        round: match.round === 'group' ? 'Group Stage' : match.round,
+        status: match.status || 'scheduled',
+        homeScore: match.home_score,
+        awayScore: match.away_score,
+      };
+    });
+
+    return matchesWithMapping;
   } catch (error) {
     console.warn(`API fetch failed: ${error.message}. Using fallback data.`);
     return null;
@@ -263,12 +382,20 @@ async function seedMatches() {
     let totalSeeded = 0;
 
     for (const match of matches) {
-      const docRef = db.collection('matches').doc(match.matchId || `match_${totalSeeded + 1}`);
+      const matchId = String(match.matchId || match.id || `match_${totalSeeded + 1}`);
+
+       if (!matchId || matchId.trim() === '') {
+        console.warn(`Skipping match without ID:`, match);
+        continue;
+      }
+
+      const docRef = db.collection('matches').doc(matchId);
       const matchData = {
         ...match,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
+
       batch.set(docRef, matchData, { merge: true });
       batchCount++;
       totalSeeded++;
@@ -285,10 +412,10 @@ async function seedMatches() {
       await batch.commit();
     }
 
-    console.log(`✅ Successfully seeded ${totalSeeded} matches!`);
+    console.log(`Successfully seeded ${totalSeeded} matches!`);
     process.exit(0);
   } catch (error) {
-    console.error('❌ Error seeding matches:', error);
+    console.error('Error seeding matches:', error);
     process.exit(1);
   }
 }
