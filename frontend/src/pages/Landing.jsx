@@ -13,17 +13,17 @@ export default function Landing() {
         <div className="flex justify-center items-center mb-6">
           <img
             src={wcLogo}
-            alt="Logo Mundial 2026"
+            alt="Logo BIA Sports 2026"
             className="w-28 h-28 md:w-32 md:h-32 object-contain drop-shadow-2xl"
           />
         </div>
         <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">
-          WC Predictor
+          BIA Sports
           <br />
           <span className="text-blue-300">2026</span>
         </h1>
         <p className="text-xl text-blue-200 mb-10 max-w-2xl mx-auto">
-          Compite con tus amigos pronosticando los resultados de la Copa Mundial FIFA 2026.
+          Compite con tus amigos pronosticando los resultados de BIA Sports 2026.
           Crea torneos privados, gana puntos y lleva el control de la tabla de posiciones.
         </p>
 
@@ -67,7 +67,7 @@ export default function Landing() {
             {
               Icon: ClipboardList,
               title: 'Haz tus pronósticos',
-              desc: 'Pronostica el resultado de los 104 partidos del Mundial 2026 antes de que empiecen.',
+              desc: 'Pronostica el resultado de los 104 partidos de BIA Sports 2026 antes de que empiecen.',
             },
             {
               Icon: Trophy,

@@ -144,7 +144,7 @@ export default function CreateTournament() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Crear Torneo</h1>
-        <p className="text-gray-500 mt-1">Configura tu torneo de pronósticos del Mundial 2026</p>
+        <p className="text-gray-500 mt-1">Configura tu torneo de pronósticos de BIA Sports 2026</p>
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6">

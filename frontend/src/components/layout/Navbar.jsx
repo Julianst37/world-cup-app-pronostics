@@ -31,8 +31,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link to={currentUser ? "/dashboard" : "/"} className="flex items-center gap-2 font-bold text-xl hover:text-blue-200 transition">
-            <img src={wcLogo} alt="Mundial 2026" className="w-8 h-8 object-contain" />
-            <span>WC Predictor 2026</span>
+            <img src={wcLogo} alt="BIA Sports 2026" className="w-8 h-8 object-contain" />
+            <span>BIA Sports 2026</span>
           </Link>
 
           {currentUser && (

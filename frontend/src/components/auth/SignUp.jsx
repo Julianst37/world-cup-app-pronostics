@@ -221,10 +221,10 @@ export default function SignUp() {
         <div className="text-center mb-8">
           <img
             src={wcLogo}
-            alt="Logo Mundial 2026"
+            alt="Logo BIA Sports 2026"
             className="w-16 h-16 object-contain mx-auto mb-3"
           />
-          <h1 className="text-3xl font-bold text-gray-800">WC Predictor 2026</h1>
+          <h1 className="text-3xl font-bold text-gray-800">BIA Sports 2026</h1>
           <p className="text-gray-500 mt-1">Únete a la competencia de pronósticos</p>
         </div>
 

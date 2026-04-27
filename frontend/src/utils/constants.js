@@ -2,7 +2,7 @@
  * App constants
  */
 
-export const APP_NAME = 'Mundial 2026 Pronósticos';
+export const APP_NAME = 'BIA Sports 2026';
 
 export const SUPER_ADMIN_EMAIL = 'admin@worldcup2026.com';
 

@@ -69,7 +69,7 @@ export default function Dashboard() {
           ¡Hola, {userProfile?.displayName || currentUser?.email}!
         </h1>
         <p className="text-blue-200">
-          Bienvenido a tu dashboard de pronósticos del Mundial 2026
+          Bienvenido a tu dashboard de pronósticos de BIA Sports 2026
         </p>
       </div>
 

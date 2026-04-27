@@ -1,4 +1,4 @@
-// Clasificados al Mundial 2026 (48 selecciones, nombres en español)
+// Clasificados a BIA Sports 2026 (48 selecciones, nombres en español)
 export const WORLD_CUP_2026_TEAMS = [
   { code: 'mx', name: 'México', flag: 'https://flagcdn.com/mx.svg' },
   { code: 'za', name: 'Sudáfrica', flag: 'https://flagcdn.com/za.svg' },
