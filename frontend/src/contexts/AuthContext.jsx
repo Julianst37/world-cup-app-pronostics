@@ -5,7 +5,8 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   updateProfile,
   updateEmail,
   EmailAuthProvider,
@@ -223,9 +224,7 @@ export function AuthProvider({ children }) {
   }
 
   async function loginWithGoogle() {
-    const userCredential = await signInWithPopup(auth, googleProvider);
-    await ensureUserProfile(userCredential.user);
-    return userCredential;
+    await signInWithRedirect(auth, googleProvider);
   }
 
   async function logout() {
@@ -312,6 +311,13 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // Manejar el resultado del redirect de Google al volver a la app
+    getRedirectResult(auth).then(async (result) => {
+      if (result?.user) {
+        await ensureUserProfile(result.user);
+      }
+    }).catch(() => {});
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {

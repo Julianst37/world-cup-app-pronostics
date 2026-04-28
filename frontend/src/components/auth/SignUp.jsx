@@ -201,16 +201,9 @@ export default function SignUp() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      toast.success('Cuenta creada con Google');
-      navigate('/dashboard');
+      // signInWithRedirect redirige a Google — la página se recarga al volver
     } catch (error) {
-      const messages = {
-        'auth/popup-closed-by-user': 'Se cerró la ventana antes de completar el acceso con Google',
-        'auth/cancelled-popup-request': 'Ya hay un intento de acceso con Google en curso',
-        'auth/popup-blocked': 'El navegador bloqueó la ventana emergente de Google',
-      };
-      toast.error(messages[error.code] || 'No fue posible continuar con Google');
-    } finally {
+      toast.error('No fue posible continuar con Google');
       setLoading(false);
     }
   };
