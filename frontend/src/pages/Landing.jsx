@@ -7,7 +7,7 @@ export default function Landing() {
   const { currentUser } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-900 text-white" style={{ colorScheme: 'light' }}>
       {/* Hero */}
       <div className="max-w-6xl mx-auto px-4 py-20 text-center">
         <div className="flex justify-center items-center mb-6">
@@ -39,7 +39,8 @@ export default function Landing() {
             <>
               <Link
                 to="/auth/signup"
-                className="bg-white text-blue-900 hover:bg-blue-50 font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg"
+                className="font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg"
+                style={{ backgroundColor: '#ffffff', color: '#1e3a8a' }}
               >
                 Comenzar gratis
               </Link>

@@ -120,11 +120,11 @@ const handleGoBack = () => {
         </p>
 
         <div className="flex items-center justify-between">
-          <div className="text-center flex-1">
+          <div className="text-center flex-1 min-w-0">
             {homeTeam.flag && (
               <img src={homeTeam.flag} alt="" className="w-16 h-12 mx-auto mb-2 rounded object-cover" />
             )}
-            <p className="font-bold text-xl">{homeTeam.name}</p>
+            <p className="font-bold text-base sm:text-xl leading-tight break-words px-1">{homeTeam.name}</p>
           </div>
 
           <div className="text-center px-6">
@@ -142,11 +142,11 @@ const handleGoBack = () => {
             )}
           </div>
 
-          <div className="text-center flex-1">
+          <div className="text-center flex-1 min-w-0">
             {awayTeam.flag && (
               <img src={awayTeam.flag} alt="" className="w-16 h-12 mx-auto mb-2 rounded object-cover" />
             )}
-            <p className="font-bold text-xl">{awayTeam.name}</p>
+            <p className="font-bold text-base sm:text-xl leading-tight break-words px-1">{awayTeam.name}</p>
           </div>
         </div>
 

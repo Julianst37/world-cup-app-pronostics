@@ -167,12 +167,18 @@ export default function Standings() {
           standings.map((entry, index) => (
             <div
               key={entry.id}
-              className={`grid grid-cols-12 px-4 py-4 border-b border-gray-100 last:border-0 items-center ${
-                index === 0 ? 'bg-yellow-50' : index === 1 ? 'bg-gray-50' : index === 2 ? 'bg-orange-50' : ''
+              className={`grid grid-cols-12 px-4 py-4 border-b border-gray-100 dark:border-gray-700 last:border-0 items-center ${
+                index === 0
+                  ? 'bg-yellow-50 dark:bg-yellow-900/20'
+                  : index === 1
+                  ? 'bg-gray-50 dark:bg-gray-700/30'
+                  : index === 2
+                  ? 'bg-orange-50 dark:bg-orange-900/20'
+                  : 'dark:bg-gray-800'
               }`}
             >
               <div className="col-span-1 text-center">
-                <span className="text-gray-700 font-semibold">{entry.position}</span>
+                <span className="text-gray-700 dark:text-gray-200 font-semibold">{entry.position}</span>
               </div>
               <div className="col-span-7 flex items-center gap-3">
                 <TeamAvatar
@@ -181,13 +187,13 @@ export default function Standings() {
                   size={36}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-800 flex items-center gap-1.5">
+                  <p className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
                     {entry.user?.displayName}
                     {entry.userId === currentUser?.uid && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Tú</span>
+                      <span className="text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-medium">Tú</span>
                     )}
                   </p>
-                  <p className="text-xs text-gray-500">@{entry.user?.username}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">@{entry.user?.username}</p>
                 </div>
                 {/* Position movement indicator */}
                 {entry.previousPosition !== null && (
@@ -213,8 +219,8 @@ export default function Standings() {
                 )}
               </div>
               <div className="col-span-4 text-right">
-                <span className="text-xl font-bold text-blue-700">{entry.points || 0}</span>
-                <span className="text-xs text-gray-500 ml-1">pts</span>
+                <span className="text-xl font-bold text-blue-700 dark:text-blue-400">{entry.points || 0}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">pts</span>
               </div>
             </div>
           ))

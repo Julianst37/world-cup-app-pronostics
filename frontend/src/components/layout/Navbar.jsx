@@ -145,7 +145,7 @@ export default function Navbar() {
               </Link>
               <Link
                 to="/auth/signup"
-                className="bg-white text-blue-900 hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition"
+                className="bg-white dark:bg-white text-blue-900 dark:text-blue-900 hover:bg-blue-50 dark:hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition"
               >
                 Registrarse
               </Link>
