@@ -12,8 +12,6 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
-import TeamAvatar from '../common/TeamAvatar';
-import { SORTED_WORLD_CUP_2026_TEAMS, getWorldCupTeam } from '../../utils/worldCupTeams';
 import wcLogo from '../../images/wc-logo.png';
 
 function PasswordStrength({ password }) {
@@ -54,7 +52,6 @@ export default function SignUp() {
     email: '',
     password: '',
     confirmPassword: '',
-    favoriteTeam: '',
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -62,8 +59,6 @@ export default function SignUp() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-
-  const selectedTeam = getWorldCupTeam(formData.favoriteTeam);
 
   const getFieldError = (fieldName, value, nextFormData = formData) => {
     switch (fieldName) {
@@ -82,9 +77,6 @@ export default function SignUp() {
         }
         if (value !== nextFormData.password) return 'Las contraseñas no coinciden';
         return null;
-      case 'favoriteTeam':
-        if (!value) return 'Selecciona tu país favorito';
-        return null;
       default:
         return null;
     }
@@ -97,7 +89,6 @@ export default function SignUp() {
       email: getFieldError('email', formData.email),
       password: getFieldError('password', formData.password),
       confirmPassword: getFieldError('confirmPassword', formData.confirmPassword),
-      favoriteTeam: getFieldError('favoriteTeam', formData.favoriteTeam),
     };
 
     setErrors(nextErrors);
@@ -115,15 +106,6 @@ export default function SignUp() {
       ...(name === 'password'
         ? { confirmPassword: getFieldError('confirmPassword', nextFormData.confirmPassword, nextFormData) }
         : {}),
-    }));
-  };
-
-  const handleTeamSelect = (e) => {
-    const nextFormData = { ...formData, favoriteTeam: e.target.value };
-    setFormData(nextFormData);
-    setErrors((prev) => ({
-      ...prev,
-      favoriteTeam: getFieldError('favoriteTeam', e.target.value, nextFormData),
     }));
   };
 
@@ -173,8 +155,7 @@ export default function SignUp() {
         formData.email,
         formData.password,
         formData.displayName,
-        formData.username.toLowerCase(),
-        formData.favoriteTeam
+        formData.username.toLowerCase()
       );
       toast.success('¡Cuenta creada exitosamente!');
       navigate('/dashboard');
@@ -347,38 +328,6 @@ export default function SignUp() {
               required
             />
             {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
-          </div>
-
-          {/* Selector visual de país favorito */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Selecciona tu país favorito</label>
-            <select
-              name="favoriteTeam"
-              value={formData.favoriteTeam}
-              onChange={handleTeamSelect}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition bg-white ${
-                errors.favoriteTeam ? 'border-red-400 bg-red-50/40' : 'border-gray-300'
-              }`}
-              required
-            >
-              <option value="">Selecciona un país</option>
-              {SORTED_WORLD_CUP_2026_TEAMS.map((team) => (
-                <option key={team.code} value={team.code}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-            {errors.favoriteTeam && <p className="mt-1 text-sm text-red-600">{errors.favoriteTeam}</p>}
-            {selectedTeam && (
-              <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3">
-                <div className="flex items-center gap-3">
-                  <TeamAvatar teamCode={selectedTeam.code} name={formData.displayName || 'Tu avatar'} size={72} />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">Así se verá tu avatar</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           <button

@@ -202,7 +202,7 @@ export function AuthProvider({ children }) {
     return profileData;
   }
 
-  async function signup(email, password, displayName, username, favoriteTeam) {
+  async function signup(email, password, displayName, username) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
@@ -212,7 +212,6 @@ export function AuthProvider({ children }) {
       email,
       displayName,
       username,
-      favoriteTeam,
     });
 
     return userCredential;
