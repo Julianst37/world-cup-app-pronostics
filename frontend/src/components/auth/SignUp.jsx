@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   FIELD_MAX_LENGTHS,
@@ -60,13 +60,8 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [checkingUsername, setCheckingUsername] = useState(false);
-  const { signup, loginWithGoogle, currentUser } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-
-  // Redirigir si ya hay sesión activa (ej: tras volver del redirect de Google)
-  if (currentUser) {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   const selectedTeam = getWorldCupTeam(formData.favoriteTeam);
 
@@ -206,9 +201,16 @@ export default function SignUp() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      // signInWithRedirect redirige a Google — la página se recarga al volver
+      toast.success('Cuenta creada con Google');
+      navigate('/dashboard');
     } catch (error) {
-      toast.error('No fue posible continuar con Google');
+      const messages = {
+        'auth/popup-closed-by-user': 'Se cerró la ventana antes de completar el acceso con Google',
+        'auth/cancelled-popup-request': 'Ya hay un intento de acceso con Google en curso',
+        'auth/popup-blocked': 'El navegador bloqueó la ventana emergente de Google',
+      };
+      toast.error(messages[error.code] || 'No fue posible continuar con Google');
+    } finally {
       setLoading(false);
     }
   };

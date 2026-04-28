@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
@@ -10,13 +10,8 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { login, loginWithGoogle, resetPassword, currentUser } = useAuth();
+  const { login, loginWithGoogle, resetPassword } = useAuth();
   const navigate = useNavigate();
-
-  // Redirigir si ya hay sesión activa (ej: tras volver del redirect de Google)
-  if (currentUser) {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,9 +56,16 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      // signInWithRedirect redirige a Google — la página se recarga al volver
+      toast.success('Sesión iniciada con Google');
+      navigate('/dashboard');
     } catch (error) {
-      toast.error('No fue posible iniciar sesión con Google');
+      const messages = {
+        'auth/popup-closed-by-user': 'Se cerró la ventana antes de completar el acceso con Google',
+        'auth/cancelled-popup-request': 'Ya hay un intento de acceso con Google en curso',
+        'auth/popup-blocked': 'El navegador bloqueó la ventana emergente de Google',
+      };
+      toast.error(messages[error.code] || 'No fue posible iniciar sesión con Google');
+    } finally {
       setLoading(false);
     }
   };
