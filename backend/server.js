@@ -426,21 +426,20 @@ app.post('/api/predictions', async (req, res) => {
   }
 
   // Fetch match, tournament, and participant status in parallel
-  const [matchDoc, tournamentDoc, participantSnap] = await Promise.all([
-    db.collection('matches').doc(matchId).get(),
-    db.collection('tournaments').doc(tournamentId).get(),
-    db
-      .collection('participants')
-      .where('userId', '==', userId)
-      .where('tournamentId', '==', tournamentId)
-      .where('status', '==', 'active')
-      .get(),
-  ]).catch((err) => {
+  let matchDoc, tournamentDoc, participantSnap;
+  try {
+    [matchDoc, tournamentDoc, participantSnap] = await Promise.all([
+      db.collection('matches').doc(matchId).get(),
+      db.collection('tournaments').doc(tournamentId).get(),
+      db
+        .collection('participants')
+        .where('userId', '==', userId)
+        .where('tournamentId', '==', tournamentId)
+        .where('status', '==', 'active')
+        .get(),
+    ]);
+  } catch (err) {
     console.error('Firestore read error:', err);
-    return null;
-  });
-
-  if (!matchDoc) {
     res.status(500).json({ message: 'Error al consultar los datos' });
     return;
   }
