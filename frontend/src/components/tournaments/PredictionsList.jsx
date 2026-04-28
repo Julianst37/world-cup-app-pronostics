@@ -553,12 +553,12 @@ const hasChanges = useMemo(() => {
                   key={matchId}
                   className="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 transition"
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                  <div className="flex flex-wrap items-center justify-between gap-y-1.5 mb-3">
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full shrink-0">
                       {getRoundDisplayName(match.round)}{match.group ? ` · Grupo ${match.group}` : ''}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">
+                    <div className="flex items-center gap-2 ml-auto">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">
                         {formatColombiaTime(match.date, match.time)}
                       </span>
                       {isLocked && match.status !== 'finished' && (
@@ -585,16 +585,16 @@ const hasChanges = useMemo(() => {
                   {/* LAYOUT CON INPUTS INLINE Y RESULTADOS */}
                   <div className="flex items-center justify-between mb-4">
                     {/* EQUIPO HOME */}
-                    <div className="flex flex-col items-center flex-1">
-                     <div className="flex items-center gap-2 mb-2">
+                    <div className="flex flex-col items-center flex-1 min-w-0">
+                     <div className="flex flex-col items-center gap-1 mb-2">
                       {homeTeam.flag && homeTeam.name ? (
-                        <img src={homeTeam.flag} alt="" className="w-7 h-5 rounded object-cover" />
+                        <img src={homeTeam.flag} alt="" className="w-8 h-6 rounded object-cover" />
                       ) : (
-                        <div className="w-7 h-5 bg-gray-300 rounded flex items-center justify-center text-xs">
+                        <div className="w-8 h-6 bg-gray-300 rounded flex items-center justify-center text-xs">
                           ?
                         </div>
                       )}
-                      <span className="font-semibold text-gray-800 text-sm">
+                      <span className="font-semibold text-gray-800 text-xs text-center leading-tight line-clamp-2 px-1">
                         {homeTeam.name || 'Por definir'}
                       </span>
                     </div>
@@ -611,7 +611,7 @@ const hasChanges = useMemo(() => {
                     </div>
 
                     {/* INPUTS Y VS */}
-                    <div className="flex flex-col items-center gap-2 px-4">
+                    <div className="flex flex-col items-center gap-2 px-3 shrink-0">
                       <div className="flex items-center gap-2">
                         {!isLocked ? (
                           <>
@@ -658,18 +658,18 @@ const hasChanges = useMemo(() => {
                     </div>
 
                     {/* EQUIPO AWAY */}
-                    <div className="flex flex-col items-center flex-1">
-                     <div className="flex items-center gap-2 mb-2 justify-end">
-                    <span className="font-semibold text-gray-800 text-sm">
-                      {awayTeam.name || 'Por definir'}
-                    </span>
+                    <div className="flex flex-col items-center flex-1 min-w-0">
+                     <div className="flex flex-col items-center gap-1 mb-2">
                     {awayTeam.flag && awayTeam.name ? (
-                      <img src={awayTeam.flag} alt="" className="w-7 h-5 rounded object-cover" />
+                      <img src={awayTeam.flag} alt="" className="w-8 h-6 rounded object-cover" />
                     ) : (
-                      <div className="w-7 h-5 bg-gray-300 rounded flex items-center justify-center text-xs">
+                      <div className="w-8 h-6 bg-gray-300 rounded flex items-center justify-center text-xs">
                         ?
                       </div>
                     )}
+                    <span className="font-semibold text-gray-800 text-xs text-center leading-tight line-clamp-2 px-1">
+                      {awayTeam.name || 'Por definir'}
+                    </span>
                   </div>
                       {/* ✅ Últimos 3 resultados */}
                       <div className="flex gap-1 justify-end">

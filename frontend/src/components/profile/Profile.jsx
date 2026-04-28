@@ -178,7 +178,7 @@ export default function ProfileComponent() {
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-3">O elígelo visualmente</p>
                   <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {SORTED_WORLD_CUP_2026_TEAMS.map((team) => {
                         const isSelected = infoForm.favoriteTeam === team.code;
 
@@ -187,20 +187,20 @@ export default function ProfileComponent() {
                             key={team.code}
                             type="button"
                             onClick={() => setFavoriteTeam(team.code)}
-                            className={`rounded-xl border p-3 text-left transition ${
+                            className={`rounded-xl border p-2 text-left transition ${
                               isSelected
                                 ? 'border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-200'
                                 : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/50'
                             }`}
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <TeamAvatar
                                 teamCode={team.code}
                                 name={team.name}
-                                size={44}
+                                size={36}
                               />
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-800 leading-tight">{team.name}</p>
+                              <div className="min-w-0 overflow-hidden">
+                                <p className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">{team.name}</p>
                               </div>
                             </div>
                           </button>
