@@ -145,11 +145,31 @@ function buildCustomResetUrl(resetLink) {
   return customUrl.toString();
 }
 
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  'yopmail.com','yopmail.fr','mailinator.com','mailinator.net','mailinator.org',
+  'trashmail.com','trashmail.me','trashmail.net','trashmail.at','trashmail.io','trashmail.xyz',
+  'guerrillamail.com','guerrillamail.net','guerrillamail.org','guerrillamail.biz',
+  'guerrillamail.de','guerrillamail.info','grr.la','sharklasers.com',
+  'tempmail.com','temp-mail.org','temp-mail.io','tempinbox.com','temporarymail.com',
+  'throwam.com','dispostable.com','maildrop.cc','fakeinbox.com','fakemail.net',
+  'discard.email','discardmail.com','discardmail.de','getairmail.com',
+  'spam4.me','spamgourmet.com','spamgourmet.net','spamgourmet.org',
+  'mintemail.com','mt2009.com','mt2014.com','trashmail.de','trashmail.org',
+  'wegwerfmail.de','wegwerfmail.net','wegwerfmail.org','zehnminuten.de',
+  'zehnminutenmail.de','selfdestructingmail.com','throwaway.email',
+]);
+
 app.post('/api/auth/forgot-password', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
     res.status(400).json({ message: 'Debes proporcionar un email valido' });
+    return;
+  }
+
+  const emailDomain = email.split('@')[1];
+  if (emailDomain && DISPOSABLE_EMAIL_DOMAINS.has(emailDomain)) {
+    res.status(400).json({ message: 'No se permiten correos temporales o desechables' });
     return;
   }
 
