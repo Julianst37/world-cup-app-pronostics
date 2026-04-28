@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { SUPER_ADMIN_EMAIL } from '../../utils/constants';
 import toast from 'react-hot-toast';
 import { useNotifications } from '../../hooks/useNotifications';
-import { Bell, ShieldCheck } from 'lucide-react';
+import { Bell, Moon, ShieldCheck, Sun } from 'lucide-react';
 import TeamAvatar from '../common/TeamAvatar';
 import wcLogo from '../../images/wc-logo.png';
 
 export default function Navbar() {
   const { currentUser, userProfile, logout } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,6 +66,14 @@ export default function Navbar() {
                     Admin Partidos
                   </Link>
                 )}
+                {/* Toggle dark mode */}
+                <button
+                  onClick={toggleDarkMode}
+                  className="p-2 rounded-lg hover:bg-blue-800 transition"
+                  title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+                >
+                  {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
                 {currentUser && (
                   <div className="relative">
                     <Link
@@ -93,18 +103,18 @@ export default function Navbar() {
                     <span>▾</span>
                   </button>
                   {menuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl z-50">
+                    <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1 shadow-xl z-50">
                       <Link
                         to="/profile"
                         onClick={() => setMenuOpen(false)}
-                        className="block rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-100 transition"
+                        className="block rounded-lg px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       >
                         Mi Perfil
                       </Link>
-                      <div className="my-1 border-t border-gray-100" />
+                      <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
                       <button
                         onClick={handleLogout}
-                        className="block w-full rounded-lg px-4 py-2 text-left text-red-600 hover:bg-red-50 transition"
+                        className="block w-full rounded-lg px-4 py-2 text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
                       >
                         Cerrar Sesión
                       </button>
@@ -176,6 +186,13 @@ export default function Navbar() {
                 <ShieldCheck className="w-4 h-4 inline mr-1" /> Admin Partidos
               </Link>
             )}
+            <button
+              onClick={toggleDarkMode}
+              className="flex items-center gap-2 py-2 hover:text-blue-200 transition"
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {darkMode ? 'Modo claro' : 'Modo oscuro'}
+            </button>
             <Link
               to="/profile"
               onClick={() => setMenuOpen(false)}
