@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   FIELD_MAX_LENGTHS,
@@ -60,8 +60,13 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [checkingUsername, setCheckingUsername] = useState(false);
-  const { signup, loginWithGoogle } = useAuth();
+  const { signup, loginWithGoogle, currentUser } = useAuth();
   const navigate = useNavigate();
+
+  // Redirigir si ya hay sesión activa (ej: tras volver del redirect de Google)
+  if (currentUser) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const selectedTeam = getWorldCupTeam(formData.favoriteTeam);
 
