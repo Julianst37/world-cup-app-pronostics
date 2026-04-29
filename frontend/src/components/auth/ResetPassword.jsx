@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import Loading from '../common/Loading';
 import { validatePassword } from '../../utils/validators';
 
-const WORLD_CUP_LOGO = 'https://i.pinimg.com/736x/4a/7e/44/4a7e44a4a840b860c88ee3fb3776f9b0.jpg';
+const BIA_SPORTS_LOGO = '/icons/logoBIA.png';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 export default function ResetPassword() {
@@ -146,9 +146,9 @@ export default function ResetPassword() {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <img
-            src={WORLD_CUP_LOGO}
-            alt="Logo Mundial 2026"
-            className="w-16 h-16 rounded-full object-cover mx-auto mb-3 shadow-md ring-4 ring-blue-100"
+            src={BIA_SPORTS_LOGO}
+            alt="Logo BIA Sports 2026"
+            className="w-16 h-16 object-contain mx-auto mb-3 shadow-md"
           />
           <h1 className="text-3xl font-bold text-gray-800">Nueva contraseña</h1>
           <p className="text-gray-500 mt-1">Actualiza el acceso de la cuenta {email}</p>

@@ -208,8 +208,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const html = renderPasswordChangeWcTemplate({
       userName: displayName,
       resetLink,
-      appName: process.env.APP_NAME || 'World Cup 2026 Pronosticos',
-      supportEmail: process.env.SUPPORT_EMAIL || 'soporte@example.com',
+      appName: process.env.APP_NAME || 'BIA Sports 2026',
+      supportEmail: process.env.SUPPORT_EMAIL || 'soportewcpronostics@gmail.com',
     });
 
     const resendResponse = await fetch('https://api.resend.com/emails', {

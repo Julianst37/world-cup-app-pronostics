@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Globe, Trophy, Users, ClipboardList } from 'lucide-react';
-import wcLogo from '../images/wc-logo.png';
 
 export default function Landing() {
   const { currentUser } = useAuth();
@@ -12,7 +11,7 @@ export default function Landing() {
       <div className="max-w-6xl mx-auto px-4 py-20 text-center">
         <div className="flex justify-center items-center mb-6">
           <img
-            src={wcLogo}
+            src="/icons/logoBIA.png"
             alt="Logo BIA Sports 2026"
             className="w-28 h-28 md:w-32 md:h-32 object-contain drop-shadow-2xl"
           />

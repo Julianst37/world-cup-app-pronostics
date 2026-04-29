@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
-import wcLogo from '../../images/wc-logo.png';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -75,7 +74,7 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <img
-            src={wcLogo}
+            src="/icons/logoBIA.png"
             alt="Logo BIA Sports 2026"
             className="w-16 h-16 object-contain mx-auto mb-3"
           />
