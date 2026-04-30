@@ -28,9 +28,6 @@ function renderPasswordChangeWcTemplate({ userName, resetLink, appName, supportE
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e5e7eb;border-radius:18px;overflow:hidden;">
             <tr>
               <td style="background:linear-gradient(135deg,#0f3d91 0%,#1d4ed8 100%);padding:32px 32px 24px 32px;text-align:center;">
-                <div style="margin-bottom:16px;">
-                  <img src="https://biasports.website/icons/logoBIA.png" alt="BIA Sports Logo" style="max-width:80px;height:auto;display:inline-block;" />
-                </div>
                 <div style="display:inline-block;background-color:rgba(255,255,255,0.12);color:#ffffff;font-size:12px;letter-spacing:1px;text-transform:uppercase;font-weight:700;padding:8px 12px;border-radius:999px;">
                   ${safeAppName}
                 </div>
