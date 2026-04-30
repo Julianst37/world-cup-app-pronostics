@@ -96,20 +96,17 @@ export default function TournamentHome() {
 
       {/* Invite code */}
       {tournament?.inviteCode && (
-        <div className="bg-blue-50 rounded-xl border border-blue-200 p-5">
-          <h3 className="font-semibold text-blue-800 mb-1 flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Invita a tus amigos</h3>
-          <p className="text-sm text-blue-600 mb-2">Comparte este código para unirse al torneo:</p>
+        <div className="bg-blue-50 dark:bg-slate-800 rounded-xl border border-blue-200 dark:border-slate-700 p-5">
+          <h3 className="font-semibold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Invita a tus amigos</h3>
+          <p className="text-sm text-blue-600 dark:text-blue-400 mb-2">Comparte este código para unirse al torneo:</p>
           <button
             onClick={handleCopyCode}
-            className="flex items-center gap-2 bg-white border border-blue-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg px-4 py-2 transition group"
+            className="flex items-center gap-2 bg-white dark:bg-slate-700 border border-blue-300 dark:border-slate-600 hover:border-blue-500 dark:hover:border-slate-500 hover:bg-blue-50 dark:hover:bg-slate-600 rounded-lg px-4 py-2 transition group"
           >
-            <code className="text-blue-900 font-mono font-bold text-xl tracking-widest">{tournament.inviteCode}</code>
+            <code className="text-blue-900 dark:text-white font-mono font-bold text-xl tracking-widest">{tournament.inviteCode}</code>
             {copied
               ? <Check className="w-4 h-4 text-green-500" />
-              : <Copy className="w-4 h-4 text-blue-400 group-hover:text-blue-600" />}
+              : <Copy className="w-4 h-4 text-blue-400 group-hover:text-blue-600 dark:text-blue-300 dark:group-hover:text-blue-200" />}
           </button>
         </div>
       )}
-    </div>
-  );
-}
