@@ -148,7 +148,7 @@ export default function ResetPassword() {
           <img
             src={BIA_SPORTS_LOGO}
             alt="Logo BIA Sports 2026"
-            className="w-16 h-16 object-contain mx-auto mb-3 shadow-md"
+            className="w-24 h-24 object-contain mx-auto mb-3 shadow-md"
           />
           <h1 className="text-3xl font-bold text-gray-800">Nueva contraseña</h1>
           <p className="text-gray-500 mt-1">Actualiza el acceso de la cuenta {email}</p>

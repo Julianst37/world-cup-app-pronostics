@@ -13,7 +13,7 @@ export default function Landing() {
           <img
             src="/icons/logoBIA.png"
             alt="Logo BIA Sports 2026"
-            className="w-28 h-28 md:w-32 md:h-32 object-contain drop-shadow-2xl"
+            className="w-40 h-40 md:w-48 md:h-48 object-contain drop-shadow-2xl"
           />
         </div>
         <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">

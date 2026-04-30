@@ -76,7 +76,7 @@ export default function Login() {
           <img
             src="/icons/logoBIA.png"
             alt="Logo BIA Sports 2026"
-            className="w-16 h-16 object-contain mx-auto mb-3"
+            className="w-24 h-24 object-contain mx-auto mb-3"
           />
           <h1 className="text-3xl font-bold text-gray-800">BIA Sports 2026</h1>
           <p className="text-gray-500 mt-1">Inicia sesión para ver tus pronósticos</p>
