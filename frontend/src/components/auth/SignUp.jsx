@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   FIELD_MAX_LENGTHS,
@@ -58,6 +58,8 @@ export default function SignUp() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from ? location.state.from.pathname + (location.state.from.search || '') : '/dashboard';
 
   const getFieldError = (fieldName, value, nextFormData = formData) => {
     switch (fieldName) {
@@ -157,7 +159,7 @@ export default function SignUp() {
         formData.username.toLowerCase()
       );
       toast.success('¡Cuenta creada exitosamente!');
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } catch (error) {
       const messages = {
         'auth/email-already-in-use': 'Este email ya está registrado',
@@ -182,7 +184,7 @@ export default function SignUp() {
     try {
       await loginWithGoogle();
       toast.success('Cuenta creada con Google');
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } catch (error) {
       const messages = {
         'auth/popup-closed-by-user': 'Se cerró la ventana antes de completar el acceso con Google',

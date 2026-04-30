@@ -373,25 +373,29 @@ const hasChanges = useMemo(() => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-800">Pronósticos</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{predictions.length} guardados</span>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <h2 className="text-xl font-bold text-gray-800 shrink-0">Pronósticos</h2>
+          <span className="text-sm text-gray-500 shrink-0">{predictions.length} guardados</span>
+        </div>
+        <div className="flex items-center justify-between sm:justify-end sm:gap-2 shrink-0">
           <button
             onClick={handleClearAll}
             disabled={clearingAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50 whitespace-nowrap"
             title="Limpiar todos los pronósticos desbloqueados"
           >
-            <RotateCcw className="w-4 h-4" />
-            {clearingAll ? 'Limpiando...' : 'Limpiar todos'}
+            <RotateCcw className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">{clearingAll ? 'Limpiando...' : 'Limpiar todos'}</span>
+            <span className="sm:hidden">{clearingAll ? '...' : 'Limpiar'}</span>
           </button>
           <button
             onClick={() => setShowRulesModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition whitespace-nowrap"
           >
-            <BookOpen className="w-4 h-4" />
-            Ver Reglas
+            <BookOpen className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Ver Reglas</span>
+            <span className="sm:hidden">Reglas</span>
           </button>
         </div>
       </div>

@@ -27,13 +27,14 @@ export default function TournamentHome() {
   };
 
   const handleShare = async () => {
-    const text = `¡Únete a mi torneo "${tournament.name}" en BIA Sports 2026! Usa el código: ${tournament.inviteCode}`;
+    const url = `${window.location.origin}/dashboard?join=${tournament.inviteCode}`;
+    const text = `¡Únete a mi torneo "${tournament.name}" en BIA Sports 2026! Usa el código: ${tournament.inviteCode} o haz clic aquí: ${url}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'BIA Sports 2026', text });
+        await navigator.share({ title: 'BIA Sports 2026', text, url });
       } catch { /* cancelled */ }
     } else {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(url);
       toast.success('Enlace copiado al portapapeles');
     }
   };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournaments } from '../hooks/useTournaments';
 import Loading from '../components/common/Loading';
@@ -22,6 +22,17 @@ export default function Dashboard() {
   const [tournamentToLeave, setTournamentToLeave] = useState(null);
   const [leaving, setLeaving] = useState(false);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open join modal if ?join= param is present in URL
+  useEffect(() => {
+    const joinParam = searchParams.get('join');
+    if (joinParam) {
+      setJoinCode(joinParam.toUpperCase());
+      setShowJoinModal(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {

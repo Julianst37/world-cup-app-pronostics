@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
@@ -11,6 +11,8 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const { login, loginWithGoogle, resetPassword } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from ? location.state.from.pathname + (location.state.from.search || '') : '/dashboard';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,7 +25,7 @@ export default function Login() {
     try {
       await login(email, password);
       toast.success('¡Bienvenido!');
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } catch (error) {
       const messages = {
         'auth/user-not-found': 'No existe una cuenta con este email',
@@ -57,7 +59,7 @@ export default function Login() {
     try {
       await loginWithGoogle();
       toast.success('Sesión iniciada con Google');
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } catch (error) {
       const messages = {
         'auth/popup-closed-by-user': 'Se cerró la ventana antes de completar el acceso con Google',
