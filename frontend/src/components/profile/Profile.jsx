@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { validateEmail, validatePassword } from '../../utils/validators';
+import { validateEmail, validatePassword, validateDisplayName, validateUsername, FIELD_MAX_LENGTHS } from '../../utils/validators';
 import { User, Mail, Key } from 'lucide-react';
 import TeamAvatar from '../common/TeamAvatar';
 import { SORTED_WORLD_CUP_2026_TEAMS, getWorldCupTeam } from '../../utils/worldCupTeams';
@@ -16,9 +16,13 @@ export default function ProfileComponent() {
     username: userProfile?.username || '',
     favoriteTeam: userProfile?.favoriteTeam || '',
   });
+  const [infoErrors, setInfoErrors] = useState({});
 
   const [emailForm, setEmailForm] = useState({ newEmail: '', currentPassword: '' });
+  const [emailErrors, setEmailErrors] = useState({});
+
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordErrors, setPasswordErrors] = useState({});
 
   useEffect(() => {
     setInfoForm({
@@ -28,8 +32,27 @@ export default function ProfileComponent() {
     });
   }, [userProfile]);
 
+  // --- Info validation ---
+  const validateInfoField = (name, value) => {
+    if (name === 'displayName') return validateDisplayName(value);
+    if (name === 'username') return validateUsername(value);
+    return null;
+  };
+
+  const handleInfoChange = (e) => {
+    const { name, value } = e.target;
+    setInfoForm((prev) => ({ ...prev, [name]: value }));
+    setInfoErrors((prev) => ({ ...prev, [name]: validateInfoField(name, value) }));
+  };
+
   const handleInfoSubmit = async (e) => {
     e.preventDefault();
+    const next = {
+      displayName: validateInfoField('displayName', infoForm.displayName),
+      username: validateInfoField('username', infoForm.username),
+    };
+    setInfoErrors(next);
+    if (Object.values(next).some(Boolean)) return;
     setLoading(true);
     try {
       await updateUserProfile(infoForm);
@@ -41,37 +64,96 @@ export default function ProfileComponent() {
     }
   };
 
+  // --- Email validation ---
+  const validateEmailField = (name, value) => {
+    if (name === 'newEmail') return validateEmail(value);
+    if (name === 'currentPassword') {
+      if (!value) return 'La contraseña actual es requerida';
+      return null;
+    }
+    return null;
+  };
+
+  const handleEmailChange = (e) => {
+    const { name, value } = e.target;
+    setEmailForm((prev) => ({ ...prev, [name]: value }));
+    setEmailErrors((prev) => ({ ...prev, [name]: validateEmailField(name, value) }));
+  };
+
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    const emailError = validateEmail(emailForm.newEmail);
-    if (emailError) { toast.error(emailError); return; }
+    const next = {
+      newEmail: validateEmailField('newEmail', emailForm.newEmail),
+      currentPassword: validateEmailField('currentPassword', emailForm.currentPassword),
+    };
+    setEmailErrors(next);
+    if (Object.values(next).some(Boolean)) return;
     setLoading(true);
     try {
       await updateUserEmail(emailForm.newEmail, emailForm.currentPassword);
       toast.success('Email actualizado');
       setEmailForm({ newEmail: '', currentPassword: '' });
+      setEmailErrors({});
     } catch (err) {
-      toast.error(err.code === 'auth/wrong-password' ? 'Contraseña incorrecta' : 'Error al actualizar email');
+      if (err.code === 'auth/wrong-password') {
+        setEmailErrors((prev) => ({ ...prev, currentPassword: 'Contraseña incorrecta' }));
+      } else {
+        toast.error('Error al actualizar email');
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // --- Password validation ---
+  const validatePasswordField = (name, value, form = passwordForm) => {
+    if (name === 'currentPassword') {
+      if (!value) return 'La contraseña actual es requerida';
+      return null;
+    }
+    if (name === 'newPassword') return validatePassword(value);
+    if (name === 'confirmPassword') {
+      if (!value) return 'Debes confirmar la contraseña';
+      if (value !== form.newPassword) return 'Las contraseñas no coinciden';
+      return null;
+    }
+    return null;
+  };
+
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target;
+    const nextForm = { ...passwordForm, [name]: value };
+    setPasswordForm(nextForm);
+    setPasswordErrors((prev) => ({
+      ...prev,
+      [name]: validatePasswordField(name, value, nextForm),
+      ...(name === 'newPassword'
+        ? { confirmPassword: validatePasswordField('confirmPassword', nextForm.confirmPassword, nextForm) }
+        : {}),
+    }));
+  };
+
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
-    const pwError = validatePassword(passwordForm.newPassword);
-    if (pwError) { toast.error(pwError); return; }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error('Las contraseñas no coinciden');
-      return;
-    }
+    const next = {
+      currentPassword: validatePasswordField('currentPassword', passwordForm.currentPassword),
+      newPassword: validatePasswordField('newPassword', passwordForm.newPassword),
+      confirmPassword: validatePasswordField('confirmPassword', passwordForm.confirmPassword),
+    };
+    setPasswordErrors(next);
+    if (Object.values(next).some(Boolean)) return;
     setLoading(true);
     try {
       await updateUserPassword(passwordForm.currentPassword, passwordForm.newPassword);
       toast.success('Contraseña actualizada');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordErrors({});
     } catch (err) {
-      toast.error(err.code === 'auth/wrong-password' ? 'Contraseña actual incorrecta' : err.message || 'Error al cambiar contraseña');
+      if (err.code === 'auth/wrong-password') {
+        setPasswordErrors((prev) => ({ ...prev, currentPassword: 'Contraseña actual incorrecta' }));
+      } else {
+        toast.error(err.message || 'Error al cambiar contraseña');
+      }
     } finally {
       setLoading(false);
     }
@@ -126,19 +208,25 @@ export default function ProfileComponent() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
                 <input
                   type="text"
+                  name="displayName"
                   value={infoForm.displayName}
-                  onChange={(e) => setInfoForm({ ...infoForm, displayName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                  onChange={handleInfoChange}
+                  maxLength={FIELD_MAX_LENGTHS.displayName}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${infoErrors.displayName ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {infoErrors.displayName && <p className="mt-1 text-sm text-red-600">{infoErrors.displayName}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de usuario</label>
                 <input
                   type="text"
+                  name="username"
                   value={infoForm.username}
-                  onChange={(e) => setInfoForm({ ...infoForm, username: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                  onChange={handleInfoChange}
+                  maxLength={FIELD_MAX_LENGTHS.username}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${infoErrors.username ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {infoErrors.username && <p className="mt-1 text-sm text-red-600">{infoErrors.username}</p>}
               </div>
               <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 to-blue-50 p-5 space-y-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -234,22 +322,25 @@ export default function ProfileComponent() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nuevo email</label>
                 <input
-                  type="email"
+                  type="text"
+                  name="newEmail"
                   value={emailForm.newEmail}
-                  onChange={(e) => setEmailForm({ ...emailForm, newEmail: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                  required
+                  onChange={handleEmailChange}
+                  maxLength={FIELD_MAX_LENGTHS.email}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${emailErrors.newEmail ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {emailErrors.newEmail && <p className="mt-1 text-sm text-red-600">{emailErrors.newEmail}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
                 <input
                   type="password"
+                  name="currentPassword"
                   value={emailForm.currentPassword}
-                  onChange={(e) => setEmailForm({ ...emailForm, currentPassword: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                  required
+                  onChange={handleEmailChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${emailErrors.currentPassword ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {emailErrors.currentPassword && <p className="mt-1 text-sm text-red-600">{emailErrors.currentPassword}</p>}
               </div>
               <button
                 type="submit"
@@ -267,31 +358,34 @@ export default function ProfileComponent() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
                 <input
                   type="password"
+                  name="currentPassword"
                   value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                  required
+                  onChange={handlePasswordChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${passwordErrors.currentPassword ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {passwordErrors.currentPassword && <p className="mt-1 text-sm text-red-600">{passwordErrors.currentPassword}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
                 <input
                   type="password"
+                  name="newPassword"
                   value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                  required
+                  onChange={handlePasswordChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${passwordErrors.newPassword ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {passwordErrors.newPassword && <p className="mt-1 text-sm text-red-600">{passwordErrors.newPassword}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar nueva contraseña</label>
                 <input
                   type="password"
+                  name="confirmPassword"
                   value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                  required
+                  onChange={handlePasswordChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${passwordErrors.confirmPassword ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
                 />
+                {passwordErrors.confirmPassword && <p className="mt-1 text-sm text-red-600">{passwordErrors.confirmPassword}</p>}
               </div>
               <button
                 type="submit"

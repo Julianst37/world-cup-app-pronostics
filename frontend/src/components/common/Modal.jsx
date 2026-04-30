@@ -15,10 +15,11 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
             style={{ maxHeight: '90dvh' }}
           >
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 shrink-0">
-              <h2 className="text-lg font-bold text-gray-800">{title}</h2>
+              <div className="w-6" />
+              <h2 className="text-lg font-bold text-gray-800 text-center flex-1">{title}</h2>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 transition"
+                className="text-gray-400 hover:text-gray-600 transition w-6 text-right"
               >
                 ✕
               </button>

@@ -6,6 +6,7 @@ const admin = require('firebase-admin');
 const cron = require('node-cron');
 
 const { renderPasswordChangeWcTemplate } = require('./templates/passwordChangeWc');
+const { renderSupportPasswordTemplate } = require('./templates/supportPasswordWc');
 
 const MAX_PASSWORD_CHANGES = 3;
 
@@ -382,6 +383,116 @@ app.post('/api/auth/change-password', async (req, res) => {
   } catch (error) {
     console.error('Authenticated change password error:', error);
     res.status(500).json({ message: 'No fue posible actualizar la contraseña' });
+  }
+});
+
+// ─── Admin: Support password ──────────────────────────────────────────────
+
+function generateSupportPassword() {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const digits = '0123456789';
+  const parts = [];
+  for (let i = 0; i < 2; i++) parts.push(upper[Math.floor(Math.random() * upper.length)]);
+  for (let i = 0; i < 4; i++) parts.push(digits[Math.floor(Math.random() * digits.length)]);
+  for (let i = 0; i < 6; i++) parts.push(lower[Math.floor(Math.random() * lower.length)]);
+  for (let i = parts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [parts[i], parts[j]] = [parts[j], parts[i]];
+  }
+  return parts.join('');
+}
+
+app.post('/api/admin/support-password', async (req, res) => {
+  const idToken = String(req.body?.idToken || '').trim();
+  const targetEmail = String(req.body?.targetEmail || '').trim().toLowerCase();
+
+  if (!idToken) {
+    res.status(401).json({ message: 'No autorizado' });
+    return;
+  }
+
+  if (!targetEmail) {
+    res.status(400).json({ message: 'Email del usuario requerido' });
+    return;
+  }
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@worldcup2026.com';
+
+    if (decodedToken.email !== superAdminEmail) {
+      res.status(403).json({ message: 'No tienes permisos para esta acción' });
+      return;
+    }
+
+    let targetRecord;
+    try {
+      targetRecord = await admin.auth().getUserByEmail(targetEmail);
+    } catch (err) {
+      if (err.code === 'auth/user-not-found') {
+        res.status(404).json({ message: 'Usuario no encontrado' });
+        return;
+      }
+      throw err;
+    }
+
+    const tempPassword = generateSupportPassword();
+
+    await admin.auth().updateUser(targetRecord.uid, { password: tempPassword });
+
+    const userRef = db.collection('users').doc(targetRecord.uid);
+    const userDoc = await userRef.get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+    const displayName = userData?.displayName || targetRecord.displayName || '';
+
+    await userRef.set(
+      {
+        passwordChangeCount: 0,
+        lastSupportPasswordAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173/auth/login').replace(
+      /\/auth\/reset-password$/,
+      ''
+    );
+    const loginUrl = `${frontendBase}/auth/login`;
+
+    const html = renderSupportPasswordTemplate({
+      userName: displayName,
+      tempPassword,
+      appName: process.env.APP_NAME || 'BIA Sports 2026',
+      supportEmail: process.env.SUPPORT_EMAIL || 'soportewcpronostics@gmail.com',
+      loginUrl,
+    });
+
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM,
+        to: targetEmail,
+        subject: `${process.env.APP_NAME || 'BIA Sports 2026'} - Clave temporal asignada`,
+        html,
+        reply_to: process.env.SUPPORT_EMAIL || undefined,
+      }),
+    });
+
+    if (!resendResponse.ok) {
+      const resendError = await resendResponse.text();
+      throw new Error(`Resend error: ${resendError}`);
+    }
+
+    res.status(200).json({ message: 'Contraseña temporal enviada al usuario' });
+  } catch (error) {
+    console.error('Support password error:', error);
+    res.status(500).json({ message: 'No fue posible asignar la contraseña temporal' });
   }
 });
 

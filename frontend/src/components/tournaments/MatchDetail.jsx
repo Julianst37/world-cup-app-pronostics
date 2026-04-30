@@ -16,6 +16,7 @@ export default function MatchDetail() {
   const { toggleFavorite, isFavorite } = useFavorites();
   const [match, setMatch] = useState(null);
   const [predictions, setPredictions] = useState([]);
+  const [participants, setParticipants] = useState([]);
   const [tournament, setTournament] = useState(null);
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
@@ -60,6 +61,31 @@ const handleGoBack = () => {
         setTournament(null);
       }
 
+      // Load active participants for the tournament
+      if (tournamentId) {
+        const participantsSnap = await getDocs(
+          query(
+            collection(db, 'participants'),
+            where('tournamentId', '==', tournamentId),
+            where('status', '==', 'active')
+          )
+        );
+        const participantUsers = await Promise.all(
+          participantsSnap.docs.map(async (pd) => {
+            const data = pd.data();
+            if (data.userName) return { userId: data.userId, userName: data.userName };
+            // fallback: fetch user doc
+            try {
+              const userDoc = await getDoc(doc(db, 'users', data.userId));
+              return { userId: data.userId, userName: userDoc.data()?.displayName || data.userId };
+            } catch {
+              return { userId: data.userId, userName: data.userId };
+            }
+          })
+        );
+        setParticipants(participantUsers);
+      }
+
       const predictionConstraints = [where('matchId', '==', matchId)];
       if (tournamentId) {
         predictionConstraints.push(where('tournamentId', '==', tournamentId));
@@ -88,7 +114,22 @@ const handleGoBack = () => {
   const awayTeam = getCanonicalTeamDisplay(match.awayTeam, match.awayTeamCode, match.awayTeamFlag);
   const locked = isMatchLocked(match, tournament);
   const myPrediction = predictions.find((p) => p.userId === currentUser?.uid);
-  const visiblePredictions = locked ? predictions : (myPrediction ? [myPrediction] : []);
+
+  // When locked, show all participants (with or without prediction)
+  const visiblePredictions = locked
+    ? (() => {
+        const predMap = new Map(predictions.map((p) => [p.userId, p]));
+        const baseList = participants.length > 0
+          ? participants.map((part) => predMap.get(part.userId) || { userId: part.userId, userName: part.userName, noPrediction: true })
+          : predictions;
+        return [...baseList].sort((a, b) => {
+          if (a.noPrediction && !b.noPrediction) return 1;
+          if (!a.noPrediction && b.noPrediction) return -1;
+          if ((b.points ?? -1) !== (a.points ?? -1)) return (b.points ?? -1) - (a.points ?? -1);
+          return String(a.userName || '').localeCompare(String(b.userName || ''), 'es', { sensitivity: 'base' });
+        });
+      })()
+    : (myPrediction ? [myPrediction] : []);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -181,19 +222,28 @@ const handleGoBack = () => {
           <div className="space-y-2">
             {visiblePredictions.map((pred) => (
               <div
-                key={pred.id}
+                key={pred.id || pred.userId}
                 className="grid grid-cols-[minmax(0,1fr)_88px_72px] items-center gap-3 py-2 border-b border-gray-100 last:border-0"
               >
-                <span className="min-w-0 text-sm text-gray-600 flex items-center gap-1.5">
+                <span className="min-w-0 text-sm text-gray-600 flex items-center gap-1.5 flex-wrap">
                   {pred.userName}
                   {pred.userId === currentUser?.uid && (
                     <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Tú</span>
                   )}
+                  {pred.noPrediction && (
+                    <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">Sin pronóstico</span>
+                  )}
                 </span>
-                <span className="text-center font-semibold text-gray-800 tabular-nums">
-                  {pred.prediction?.homeScore} - {pred.prediction?.awayScore}
-                </span>
-                {pred.points !== null ? (
+                {pred.noPrediction ? (
+                  <span className="text-center text-sm text-gray-300">—</span>
+                ) : (
+                  <span className="text-center font-semibold text-gray-800 tabular-nums">
+                    {pred.prediction?.homeScore} - {pred.prediction?.awayScore}
+                  </span>
+                )}
+                {pred.noPrediction ? (
+                  <span className="text-right text-sm text-gray-300">—</span>
+                ) : pred.points !== null ? (
                   <span className="text-right text-sm font-medium text-green-600 tabular-nums">{pred.points} pts</span>
                 ) : (
                   <span className="text-right text-sm text-gray-400">-</span>

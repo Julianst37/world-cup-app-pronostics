@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   increment,
   getCountFromServer,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from './useAuth';
@@ -129,7 +130,24 @@ export function useTournaments() {
   }, []);
 
   const deleteTournament = useCallback(async (tournamentId) => {
-    await deleteDoc(doc(db, 'tournaments', tournamentId));
+    const batch = writeBatch(db);
+
+    // Delete tournament document
+    batch.delete(doc(db, 'tournaments', tournamentId));
+
+    // Delete all participants
+    const participantsSnap = await getDocs(
+      query(collection(db, 'participants'), where('tournamentId', '==', tournamentId))
+    );
+    participantsSnap.forEach((d) => batch.delete(d.ref));
+
+    // Delete all predictions
+    const predictionsSnap = await getDocs(
+      query(collection(db, 'predictions'), where('tournamentId', '==', tournamentId))
+    );
+    predictionsSnap.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
   }, []);
 
   const joinTournament = useCallback(
@@ -157,6 +175,20 @@ export function useTournaments() {
       const existingParticipant = await getDocs(participantQ);
 
       if (!existingParticipant.empty) throw new Error('Ya eres participante de este torneo');
+
+      // Check participant limit
+      if (tournament.maxUsers != null) {
+        const activeCountSnap = await getCountFromServer(
+          query(
+            collection(db, 'participants'),
+            where('tournamentId', '==', tournament.id),
+            where('status', '==', 'active')
+          )
+        );
+        if (activeCountSnap.data().count >= tournament.maxUsers) {
+          throw new Error(`Este torneo ya alcanzó el límite de ${tournament.maxUsers} participantes`);
+        }
+      }
 
       const status = tournament.requiresApproval ? 'pending' : 'active';
 
@@ -253,6 +285,48 @@ export function useTournaments() {
     setTournaments(data);
   }, [currentUser]);
 
+  const leaveTournament = useCallback(
+    async (tournamentId) => {
+      if (!currentUser) throw new Error('Must be logged in');
+
+      // Check predictions
+      const predictionsSnap = await getCountFromServer(
+        query(
+          collection(db, 'predictions'),
+          where('tournamentId', '==', tournamentId),
+          where('userId', '==', currentUser.uid)
+        )
+      );
+      if (predictionsSnap.data().count > 0) {
+        const err = new Error(
+          'No puedes salir del torneo porque ya tienes pronósticos registrados en él.'
+        );
+        err.code = 'has-predictions';
+        throw err;
+      }
+
+      // Find participant doc
+      const participantSnap = await getDocs(
+        query(
+          collection(db, 'participants'),
+          where('tournamentId', '==', tournamentId),
+          where('userId', '==', currentUser.uid),
+          where('status', '==', 'active')
+        )
+      );
+      if (participantSnap.empty) throw new Error('No eres participante de este torneo');
+
+      const batch = writeBatch(db);
+      participantSnap.forEach((d) => batch.delete(d.ref));
+      batch.update(doc(db, 'tournaments', tournamentId), {
+        memberCount: increment(-1),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+    },
+    [currentUser]
+  );
+
   return {
     tournaments,
     loading,
@@ -261,6 +335,7 @@ export function useTournaments() {
     updateTournament,
     deleteTournament,
     joinTournament,
+    leaveTournament,
     getTournament,
     fetchTournaments
   };

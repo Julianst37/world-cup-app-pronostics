@@ -218,11 +218,26 @@ export function AuthProvider({ children }) {
   }
 
   async function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+    if (userDoc.exists() && userDoc.data().isActive === false) {
+      await signOut(auth);
+      const err = new Error('Tu cuenta está inactiva. Contacta al administrador.');
+      err.code = 'auth/user-inactive';
+      throw err;
+    }
+    return userCredential;
   }
 
   async function loginWithGoogle() {
     const userCredential = await signInWithPopup(auth, googleProvider);
+    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+    if (userDoc.exists() && userDoc.data().isActive === false) {
+      await signOut(auth);
+      const err = new Error('Tu cuenta está inactiva. Contacta al administrador.');
+      err.code = 'auth/user-inactive';
+      throw err;
+    }
     await ensureUserProfile(userCredential.user);
     return userCredential;
   }

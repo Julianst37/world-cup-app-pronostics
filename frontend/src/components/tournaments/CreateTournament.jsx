@@ -8,7 +8,7 @@ import {
   validateTournamentName,
 } from '../../utils/validators';
 import toast from 'react-hot-toast';
-import { Rocket, CircleHelp } from 'lucide-react';
+import { CircleHelp } from 'lucide-react';
 
 export default function CreateTournament() {
   const { createTournament } = useTournaments();
@@ -20,6 +20,7 @@ export default function CreateTournament() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    limitParticipants: false,
     maxUsers: 50,
     requiresApproval: false,
     secondRoundMultiplier: 2,
@@ -38,64 +39,72 @@ export default function CreateTournament() {
   const exactTotalPoints = exactBasePoints * 2 + differenceBasePoints + winnerBasePoints;
   const differenceTotalPoints = differenceBasePoints + winnerBasePoints;
 
-  const getFieldError = (fieldName, value) => {
-    switch (fieldName) {
+  const validateField = (name, value) => {
+    switch (name) {
       case 'name':
         return validateTournamentName(value);
       case 'description':
         return validateTournamentDescription(value);
+      case 'maxUsers': {
+        if (!formData.limitParticipants) return null;
+        if (value === '' || value === null || value === undefined) return 'El límite de participantes es obligatorio';
+        const n = parseInt(value, 10);
+        if (isNaN(n)) return 'El límite de participantes es obligatorio';
+        if (n < 2) return 'Debe haber al menos 2 participantes';
+        if (n > 500) return 'El límite máximo es 500 participantes';
+        return null;
+      }
+      case 'secondRoundMultiplier': {
+        if (value === '' || value === null || value === undefined) return 'El multiplicador es obligatorio';
+        const n = parseInt(value, 10);
+        if (isNaN(n)) return 'El multiplicador es obligatorio';
+        if (n < 1) return 'El multiplicador debe ser al menos 1';
+        if (n > 10) return 'El multiplicador no puede ser mayor a 10';
+        return null;
+      }
+      case 'predictionLockMinutes': {
+        if (value === '' || value === null || value === undefined) return 'El tiempo de bloqueo es obligatorio';
+        const n = parseInt(value, 10);
+        if (isNaN(n)) return 'El tiempo de bloqueo es obligatorio';
+        if (n < 10) return 'El mínimo es 10 minutos';
+        if (n > 60) return 'El máximo es 60 minutos';
+        return null;
+      }
       default:
         return null;
     }
   };
 
-  const validateForm = () => {
-    const nextErrors = {
-      name: getFieldError('name', formData.name),
-      description: getFieldError('description', formData.description),
+  const validateAll = () => {
+    const next = {
+      name: validateField('name', formData.name),
+      maxUsers: validateField('maxUsers', formData.maxUsers),
+      secondRoundMultiplier: validateField('secondRoundMultiplier', formData.secondRoundMultiplier),
+      predictionLockMinutes: validateField('predictionLockMinutes', formData.predictionLockMinutes),
     };
-
-    setErrors(nextErrors);
-    return !Object.values(nextErrors).some(Boolean);
+    setErrors(next);
+    return !Object.values(next).some(Boolean);
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
-    if (name === 'predictionLockMinutes') {
+    if (type === 'number' || name === 'predictionLockMinutes' || name === 'secondRoundMultiplier' || name === 'maxUsers') {
       if (value === '' || /^\d+$/.test(value)) {
-        setFormData((prev) => ({ ...prev, predictionLockMinutes: value }));
+        setFormData((prev) => ({ ...prev, [name]: value }));
+        if (value !== '') {
+          setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
+        } else {
+          setErrors((prev) => ({ ...prev, [name]: null }));
+        }
       }
       return;
     }
 
-    const numericValue = parseInt(value, 10) || 0;
-    const normalizedValue = name === 'secondRoundMultiplier'
-      ? clampValue(numericValue, 1, 10)
-      : numericValue;
-
-    const normalizedTextValue = name === 'name'
-      ? value.slice(0, FIELD_MAX_LENGTHS.tournamentName)
-      : name === 'description'
-        ? value.slice(0, FIELD_MAX_LENGTHS.tournamentDescription)
-        : value;
-
-    const nextValue = type === 'checkbox'
-      ? checked
-      : type === 'number'
-        ? normalizedValue
-        : normalizedTextValue;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: nextValue,
-    }));
-
-    if (type !== 'checkbox' && type !== 'number' && (name === 'name' || name === 'description')) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: getFieldError(name, nextValue),
-      }));
+    const newValue = type === 'checkbox' ? checked : value;
+    setFormData((prev) => ({ ...prev, [name]: newValue }));
+    if (name !== 'description' && name !== 'requiresApproval' && name !== 'limitParticipants') {
+      setErrors((prev) => ({ ...prev, [name]: validateField(name, newValue) }));
     }
   };
 
@@ -120,7 +129,7 @@ export default function CreateTournament() {
  const handleSubmit = async (e) => {
   e.preventDefault();
 
-  if (!validateForm()) {
+  if (!validateAll()) {
     toast.error('Corrige los campos marcados para continuar');
     return;
   }
@@ -130,6 +139,7 @@ export default function CreateTournament() {
   try {
     const tournamentId = await createTournament({
       ...formData,
+      maxUsers: formData.limitParticipants ? (parseInt(formData.maxUsers, 10) || 50) : null,
       predictionLockMinutes: clampValue(parseInt(formData.predictionLockMinutes, 10) || 10, 10, 60),
     });
     toast.success('¡Torneo creado exitosamente!');
@@ -147,7 +157,7 @@ export default function CreateTournament() {
         <p className="text-gray-500 mt-1">Configura tu torneo de pronósticos de BIA Sports 2026</p>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6">
+      <form onSubmit={handleSubmit} noValidate className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         {/* Basic Info */}
         <div>
           <h2 className="text-lg font-semibold text-gray-700 mb-4">Información básica</h2>
@@ -195,96 +205,52 @@ export default function CreateTournament() {
                 <span className="text-xs text-gray-400">{formData.description.length}/{FIELD_MAX_LENGTHS.tournamentDescription}</span>
               </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Límite de participantes</label>
-              <input
-                type="number"
-                name="maxUsers"
-                value={formData.maxUsers}
-                onChange={handleChange}
-                min={2}
-                max={500}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="requiresApproval"
-                  checked={formData.requiresApproval}
-                  onChange={handleChange}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-              <div>
-                <span className="text-sm font-medium text-gray-700">Requiere aprobación</span>
-                <p className="text-xs text-gray-500">Los participantes deben ser aprobados por el admin</p>
-              </div>
-            </div>
-
           </div>
         </div>
 
         {/* Point Config */}
         <div>
-          <div className="mb-4 flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-700">Configuración de puntos</h2>
+          <div className="mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-700">Puntos por predicción</h3>
             <button
               type="button"
+              title="Ver ejemplo de puntuación"
               onClick={() => setShowScoringExample(true)}
-              title="Ver ejemplo de puntaje"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:border-blue-300 hover:text-blue-600"
+              className="text-gray-400 hover:text-gray-600 transition"
+              aria-label="Ver ejemplo de puntuación"
             >
               <CircleHelp className="w-4 h-4" />
             </button>
           </div>
           <div className="grid gap-4 md:grid-cols-3 items-stretch">
-            <div className="flex flex-col">
-              <label className="block min-h-[40px] text-sm font-medium text-gray-700 mb-1">
-                Ganador o empate
-              </label>
-              <input
-                type="number"
-                value={formData.pointConfig.winner}
-                onChange={(e) => handlePointChange('winner', e.target.value)}
-                min={0}
-                max={10}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold text-lg"
-              />
-            </div>
-            <div className="flex flex-col">
-              <label className="block min-h-[40px] text-sm font-medium text-gray-700 mb-1">
-                Goles de cada equipo
-              </label>
-              <input
-                type="number"
-                value={formData.pointConfig.exact}
-                onChange={(e) => handlePointChange('exact', e.target.value)}
-                min={0}
-                max={10}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold text-lg"
-              />
-            </div>
-            <div className="flex flex-col">
-              <label className="block min-h-[40px] text-sm font-medium text-gray-700 mb-1">
-                Diferencia de goles
-              </label>
-              <input
-                type="number"
-                value={formData.pointConfig.difference}
-                onChange={(e) => handlePointChange('difference', e.target.value)}
-                min={0}
-                max={10}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold text-lg"
-              />
-            </div>
+            {[
+              { key: 'winner', label: 'Ganador o empate' },
+              { key: 'exact', label: 'Goles por equipo' },
+              { key: 'difference', label: 'Diferencia de goles' },
+            ].map(({ key, label }) => (
+              <div key={key} className="flex flex-col">
+                <label className="block min-h-[40px] text-xs text-gray-500 mb-1">{label}</label>
+                <input
+                  type="number"
+                  value={formData.pointConfig[key]}
+                  onChange={(e) => handlePointChange(key, e.target.value)}
+                  min={0}
+                  max={10}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold text-lg"
+                />
+              </div>
+            ))}
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Multiplicador segunda ronda</label>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+              <span>Multiplicador segunda ronda <span className="text-red-500">*</span></span>
+              <span
+                title={`A partir de la segunda ronda (Ronda de 32, 16avos, Cuartos de final, Semifinales, 3er puesto y Final), los puntos obtenidos se multiplicarán x${formData.secondRoundMultiplier}`}
+                className="text-gray-400 hover:text-gray-600 cursor-help"
+              >
+                <CircleHelp className="w-4 h-4" />
+              </span>
+            </label>
             <input
               type="number"
               name="secondRoundMultiplier"
@@ -293,12 +259,13 @@ export default function CreateTournament() {
               min={1}
               max={10}
               step={1}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${errors.secondRoundMultiplier ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
             />
+            {errors.secondRoundMultiplier && <p className="mt-1 text-sm text-red-600">{errors.secondRoundMultiplier}</p>}
           </div>
           <div className="mt-4">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
-              <span>Minutos bloqueo de pronóstico</span>
+              <span>Minutos bloqueo de pronóstico <span className="text-red-500">*</span></span>
               <span
                 title={predictionLockTooltip}
                 className="text-gray-400 hover:text-gray-600 cursor-help"
@@ -315,8 +282,57 @@ export default function CreateTournament() {
               min={10}
               max={60}
               step={1}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${errors.predictionLockMinutes ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
             />
+            {errors.predictionLockMinutes && <p className="mt-1 text-sm text-red-600">{errors.predictionLockMinutes}</p>}
+          </div>
+        </div>
+
+        {/* Toggles */}
+        <div className="flex items-center gap-3">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              name="limitParticipants"
+              checked={formData.limitParticipants}
+              onChange={handleChange}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+          <span className="text-sm font-medium text-gray-700">Limitar participantes</span>
+        </div>
+
+        {formData.limitParticipants && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Límite de participantes <span className="text-red-500">*</span></label>
+            <input
+              type="number"
+              name="maxUsers"
+              value={formData.maxUsers}
+              onChange={handleChange}
+              min={2}
+              max={500}
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${errors.maxUsers ? 'border-red-400 bg-red-50/40' : 'border-gray-300'}`}
+            />
+            {errors.maxUsers && <p className="mt-1 text-sm text-red-600">{errors.maxUsers}</p>}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              name="requiresApproval"
+              checked={formData.requiresApproval}
+              onChange={handleChange}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+          <div>
+            <span className="text-sm font-medium text-gray-700">Requiere aprobación de admin</span>
+            <p className="text-xs text-gray-500">Los participantes deben ser aprobados por el admin</p>
           </div>
         </div>
 
@@ -333,7 +349,7 @@ export default function CreateTournament() {
             disabled={loading}
             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50"
           >
-            {loading ? 'Creando...' : <><Rocket className="w-4 h-4 inline mr-1.5" /> Crear Torneo</>}
+            {loading ? 'Creando...' : <><span className="mr-1.5">⚽</span> Crear Torneo</>}
           </button>
         </div>
       </form>
@@ -366,21 +382,22 @@ export default function CreateTournament() {
             </div>
           </div>
 
-          <div className="rounded-lg bg-amber-50 px-4 py-4 border border-amber-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">Segunda ronda</p>
-            <p className="text-sm text-gray-500 mb-3">Resultado ejemplo: 2 - 1 con multiplicador x{secondRoundMultiplier}</p>
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-4 py-4 border border-amber-200 dark:border-amber-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Segunda ronda</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">El resultado se evalúa sobre los <span className="font-semibold text-gray-700 dark:text-gray-300">90 minutos reglamentarios</span>, sin tiempo extra ni penales.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Resultado ejemplo: 2 - 1 con multiplicador x{secondRoundMultiplier}</p>
             <div className="space-y-2 text-sm">
-              <div className="rounded-md bg-white/80 px-3 py-2">
-                <p className="font-medium text-gray-800">Pronóstico 2-1</p>
-                <p className="text-xs text-amber-700">{exactTotalPoints} x {secondRoundMultiplier} = {exactTotalPoints * secondRoundMultiplier} pts</p>
+              <div className="rounded-md bg-white dark:bg-slate-700 px-3 py-2">
+                <p className="font-medium text-gray-800 dark:text-gray-100">Pronóstico 2-1</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">{exactTotalPoints} x {secondRoundMultiplier} = {exactTotalPoints * secondRoundMultiplier} pts</p>
               </div>
-              <div className="rounded-md bg-white/80 px-3 py-2">
-                <p className="font-medium text-gray-800">Pronóstico 1-0</p>
-                <p className="text-xs text-amber-700">{differenceTotalPoints} x {secondRoundMultiplier} = {differenceTotalPoints * secondRoundMultiplier} pts</p>
+              <div className="rounded-md bg-white dark:bg-slate-700 px-3 py-2">
+                <p className="font-medium text-gray-800 dark:text-gray-100">Pronóstico 1-0</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">{differenceTotalPoints} x {secondRoundMultiplier} = {differenceTotalPoints * secondRoundMultiplier} pts</p>
               </div>
-              <div className="rounded-md bg-white/80 px-3 py-2">
-                <p className="font-medium text-gray-800">Pronóstico 4-1</p>
-                <p className="text-xs text-amber-700">{(winnerBasePoints + exactBasePoints)} x {secondRoundMultiplier} = {(winnerBasePoints + exactBasePoints) * secondRoundMultiplier} pts</p>
+              <div className="rounded-md bg-white dark:bg-slate-700 px-3 py-2">
+                <p className="font-medium text-gray-800 dark:text-gray-100">Pronóstico 4-1</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">{(winnerBasePoints + exactBasePoints)} x {secondRoundMultiplier} = {(winnerBasePoints + exactBasePoints) * secondRoundMultiplier} pts</p>
               </div>
             </div>
           </div>

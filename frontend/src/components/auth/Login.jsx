@@ -31,6 +31,7 @@ export default function Login() {
         'auth/invalid-email': 'Email inválido',
         'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde',
         'auth/invalid-credential': 'Credenciales incorrectas',
+        'auth/user-inactive': 'Tu cuenta está inactiva. Contacta al administrador.',
       };
       toast.error(messages[error.code] || 'Error al iniciar sesión');
     } finally {
@@ -62,6 +63,7 @@ export default function Login() {
         'auth/popup-closed-by-user': 'Se cerró la ventana antes de completar el acceso con Google',
         'auth/cancelled-popup-request': 'Ya hay un intento de acceso con Google en curso',
         'auth/popup-blocked': 'El navegador bloqueó la ventana emergente de Google',
+        'auth/user-inactive': 'Tu cuenta está inactiva. Contacta al administrador.',
       };
       toast.error(messages[error.code] || 'No fue posible iniciar sesión con Google');
     } finally {

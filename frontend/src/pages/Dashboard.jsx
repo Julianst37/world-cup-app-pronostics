@@ -5,14 +5,22 @@ import { useTournaments } from '../hooks/useTournaments';
 import Loading from '../components/common/Loading';
 import Modal from '../components/common/Modal';
 import toast from 'react-hot-toast';
-import { Trophy, Users, Link2, ArrowRight } from 'lucide-react';
+import { Trophy, Users, Link2, ArrowRight, Trash2, AlertTriangle, LogOut } from 'lucide-react';
+import { collection, query, where, getCountFromServer } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 export default function Dashboard() {
   const { currentUser, userProfile } = useAuth();
-  const { tournaments, loading, joinTournament, fetchTournaments } = useTournaments();
+  const { tournaments, loading, joinTournament, fetchTournaments, deleteTournament, leaveTournament } = useTournaments();
   const [joinCode, setJoinCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [tournamentToDelete, setTournamentToDelete] = useState(null);
+  const [tournamentHasPredictions, setTournamentHasPredictions] = useState(false);
+  const [checkingDelete, setCheckingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [tournamentToLeave, setTournamentToLeave] = useState(null);
+  const [leaving, setLeaving] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -57,6 +65,60 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteClick = async (e, tournament) => {
+    e.stopPropagation();
+    setCheckingDelete(true);
+    try {
+      const snap = await getCountFromServer(
+        query(collection(db, 'predictions'), where('tournamentId', '==', tournament.id))
+      );
+      setTournamentHasPredictions(snap.data().count > 0);
+    } catch {
+      setTournamentHasPredictions(false);
+    } finally {
+      setCheckingDelete(false);
+    }
+    setTournamentToDelete(tournament);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!tournamentToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteTournament(tournamentToDelete.id);
+      toast.success(`Torneo "${tournamentToDelete.name}" eliminado`);
+      setTournamentToDelete(null);
+    } catch {
+      toast.error('Error al eliminar el torneo');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleLeaveClick = (e, tournament) => {
+    e.stopPropagation();
+    setTournamentToLeave(tournament);
+  };
+
+  const handleConfirmLeave = async () => {
+    if (!tournamentToLeave) return;
+    setLeaving(true);
+    try {
+      await leaveTournament(tournamentToLeave.id);
+      toast.success(`Saliste del torneo "${tournamentToLeave.name}"`);
+      setTournamentToLeave(null);
+    } catch (err) {
+      if (err.code === 'has-predictions') {
+        toast.error(err.message);
+        setTournamentToLeave(null);
+      } else {
+        toast.error('Error al salir del torneo');
+      }
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   if (loading) return <Loading />;
 
   const isAdminOfAny = tournaments.some((t) => t.adminId === currentUser?.uid);
@@ -73,25 +135,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Quick Stats */}
-      {isAdminOfAny && (
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-          <div className="text-3xl font-bold text-blue-700">{tournaments.length}</div>
-          <div className="text-sm text-gray-500 mt-1">Torneos activos</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-          <div className="text-3xl font-bold text-green-600">
-            {tournaments.reduce((sum, t) => sum + (t.memberCount || 0), 0)}
-          </div>
-          <div className="text-sm text-gray-500 mt-1">Total participantes</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5 text-center col-span-2 md:col-span-1">
-          <div className="text-3xl font-bold text-orange-500">104</div>
-          <div className="text-sm text-gray-500 mt-1">Partidos totales</div>
-        </div>
-      </div>
-      )}
+      {/* Quick Stats removed */}
 
       {/* Actions */}
       <div className="flex gap-3">
@@ -111,7 +155,9 @@ export default function Dashboard() {
 
       {/* Tournaments List */}
       <div>
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Mis Torneos</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">
+          Mis Torneos ({tournaments.length})
+        </h2>
         {tournaments.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
             <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -129,12 +175,29 @@ export default function Dashboard() {
             {tournaments.map((tournament) => (
               <div
                 key={tournament.id}
-                onClick={() => navigate(`/tournaments/${tournament.id}/home`)}
-                className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md p-5 cursor-pointer transition"
+                onClick={() => {
+                  if (tournament.status === 'inactive') {
+                    toast.error('Este torneo está desactivado y no se puede acceder');
+                    return;
+                  }
+                  navigate(`/tournaments/${tournament.id}/home`);
+                }}
+                className={`bg-white rounded-xl border p-5 transition ${
+                  tournament.status === 'inactive'
+                    ? 'border-gray-200 opacity-70 cursor-not-allowed'
+                    : 'border-gray-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-gray-800 text-lg">{tournament.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${
+                          tournament.status === 'inactive' ? 'bg-red-500' : 'bg-green-500'
+                        }`}
+                      />
+                      <h3 className="font-bold text-gray-800 text-lg">{tournament.name}</h3>
+                    </div>
                     {tournament.description && (
                       <p className="text-gray-500 text-sm mt-1 line-clamp-1">{tournament.description}</p>
                     )}
@@ -142,20 +205,135 @@ export default function Dashboard() {
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Users className="w-3 h-3" /> {tournament.memberCount} participantes
                       </span>
-                      {tournament.adminId === currentUser?.uid && (
+                      {tournament.adminId === currentUser?.uid ? (
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
                           Admin
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                          Participante
                         </span>
                       )}
                     </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400" />
+                  <div className="flex items-center gap-2">
+                    {tournament.adminId === currentUser?.uid && (
+                      <button
+                        onClick={(e) => handleDeleteClick(e, tournament)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+                        title="Eliminar torneo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {tournament.adminId !== currentUser?.uid && (
+                      <button
+                        onClick={(e) => handleLeaveClick(e, tournament)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition"
+                        title="Salir del torneo"
+                      >
+                        <LogOut className="w-4 h-4" />
+                      </button>
+                    )}
+                    <ArrowRight className="w-5 h-5 text-gray-400" />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!tournamentToDelete}
+        onClose={() => !deleting && setTournamentToDelete(null)}
+        title="Eliminar torneo"
+        size="sm"
+      >
+        {checkingDelete ? (
+          <p className="text-gray-500 text-center py-4">Verificando...</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                {tournamentHasPredictions ? (
+                  <>
+                    <p className="font-semibold text-gray-800 mb-1">Este torneo tiene pronósticos guardados</p>
+                    <p className="text-sm text-gray-600">
+                      Al eliminar <span className="font-medium">"{tournamentToDelete?.name}"</span>, también se eliminarán
+                      todos los pronósticos y participantes asociados. Esta acción no se puede deshacer.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold text-gray-800 mb-1">¿Confirmar eliminación?</p>
+                    <p className="text-sm text-gray-600">
+                      ¿Estás seguro de que deseas eliminar el torneo <span className="font-medium">"{tournamentToDelete?.name}"</span>?
+                      Esta acción no se puede deshacer.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setTournamentToDelete(null)}
+                disabled={deleting}
+                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50"
+              >
+                {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Leave Confirmation Modal */}
+      <Modal
+        isOpen={!!tournamentToLeave}
+        onClose={() => !leaving && setTournamentToLeave(null)}
+        title="Salir del torneo"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-orange-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-gray-800 mb-1">¿Confirmar salida?</p>
+              <p className="text-sm text-gray-600">
+                ¿Estás seguro de que deseas salir del torneo{' '}
+                <span className="font-medium">"{tournamentToLeave?.name}"</span>? Dejarás de ser
+                participante y no podrás volver a ingresar a menos que uses el código de invitación.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setTournamentToLeave(null)}
+              disabled={leaving}
+              className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirmLeave}
+              disabled={leaving}
+              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50"
+            >
+              {leaving ? 'Saliendo...' : 'Sí, salir'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Join Modal */}
       <Modal

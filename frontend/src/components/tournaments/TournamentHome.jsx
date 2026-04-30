@@ -5,7 +5,7 @@ import { useMatches } from '../../hooks/useMatches';
 import { usePredictions } from '../../hooks/usePredictions';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Trophy, BarChart3, Users, Link2, Copy, Check } from 'lucide-react';
+import { Trophy, BarChart3, Users, Link2, Copy, Check, Share2 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -15,6 +15,7 @@ export default function TournamentHome() {
   const { matches, loading: matchesLoading } = useMatches();
   const { predictions, loading: predictionsLoading } = usePredictions(tournament?.id);
   const [activeParticipants, setActiveParticipants] = useState(null);
+  const [userRank, setUserRank] = useState(null);
   const [participantsLoading, setParticipantsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -23,6 +24,18 @@ export default function TournamentHome() {
     setCopied(true);
     toast.success('Código copiado');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = async () => {
+    const text = `¡Únete a mi torneo "${tournament.name}" en BIA Sports 2026! Usa el código: ${tournament.inviteCode}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'BIA Sports 2026', text });
+      } catch { /* cancelled */ }
+    } else {
+      navigator.clipboard.writeText(text);
+      toast.success('Enlace copiado al portapapeles');
+    }
   };
 
   useEffect(() => {
@@ -40,7 +53,11 @@ export default function TournamentHome() {
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setActiveParticipants(snap.size);
+      const parts = snap.docs.map((d) => d.data());
+      setActiveParticipants(parts.length);
+      const sorted = [...parts].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+      const idx = sorted.findIndex((p) => p.userId === currentUser?.uid);
+      setUserRank(idx >= 0 ? idx + 1 : null);
       setParticipantsLoading(false);
     });
 
@@ -54,7 +71,11 @@ export default function TournamentHome() {
     { label: 'Partidos jugados', value: matchesLoading ? null : completedMatches, Icon: FaFutbol },
     { label: 'Tus puntos', value: predictionsLoading ? null : totalPoints, Icon: Trophy },
     { label: 'Tus pronósticos', value: predictionsLoading ? null : predictions.length, Icon: BarChart3 },
-    { label: 'Participantes', value: participantsLoading ? null : activeParticipants, Icon: Users },
+    {
+      label: 'Tu posición',
+      value: participantsLoading ? null : (userRank != null ? `#${userRank}/${activeParticipants}` : '—'),
+      Icon: Users,
+    },
   ];
 
   return (
@@ -108,5 +129,14 @@ export default function TournamentHome() {
               ? <Check className="w-4 h-4 text-green-500" />
               : <Copy className="w-4 h-4 text-blue-400 group-hover:text-blue-600 dark:text-blue-300 dark:group-hover:text-blue-200" />}
           </button>
+          <button
+            onClick={handleShare}
+            className="mt-2 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2.5 transition text-sm w-full sm:w-auto"
+          >
+            <Share2 className="w-4 h-4" /> Compartir invitación
+          </button>
         </div>
       )}
+    </div>
+  );
+}

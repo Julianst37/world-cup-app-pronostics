@@ -4,6 +4,9 @@ import {
   query,
   where,
   onSnapshot,
+  deleteDoc,
+  getDocs,
+  doc,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from './useAuth';
@@ -98,7 +101,30 @@ export function usePredictions(tournamentId) {
     [predictions]
   );
 
-  return { predictions, loading, error, savePrediction, getPredictionForMatch };
+  const clearPrediction = useCallback(
+    async (matchId) => {
+      if (!currentUser || !tournamentId) return;
+      const q = query(
+        collection(db, 'predictions'),
+        where('userId', '==', currentUser.uid),
+        where('tournamentId', '==', tournamentId),
+        where('matchId', '==', String(matchId))
+      );
+      const snap = await getDocs(q);
+      await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, 'predictions', d.id))));
+    },
+    [currentUser, tournamentId]
+  );
+
+  const clearAllPredictions = useCallback(
+    async (matchIds) => {
+      if (!currentUser || !tournamentId) return;
+      await Promise.all(matchIds.map((matchId) => clearPrediction(matchId)));
+    },
+    [currentUser, tournamentId, clearPrediction]
+  );
+
+  return { predictions, loading, error, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions };
 }
 
 export default usePredictions;

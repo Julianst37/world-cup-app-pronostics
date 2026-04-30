@@ -9,7 +9,7 @@ import Modal from '../common/Modal';
 import { calculateTournamentPredictionPoints, formatColombiaTime, getRoundDisplayName, isRoundGloballyEnabled, normalizeRoundName } from '../../utils/helpers';
 import { getCanonicalTeamDisplay } from '../../utils/worldCupTeams';
 import toast from 'react-hot-toast';
-import { BookOpen, MapPin, Save, Star } from 'lucide-react';
+import { BookOpen, MapPin, Save, Star, X, RotateCcw } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 
 const ITEMS_PER_PAGE = 10;
@@ -84,7 +84,7 @@ export default function PredictionsList() {
   const { tournament } = useOutletContext();
   const { matches, loading } = useMatches();
   const { settings: platformSettings, loading: platformSettingsLoading } = usePlatformSettings();
-  const { predictions, savePrediction, getPredictionForMatch } = usePredictions(tournament?.id);
+  const { predictions, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions } = usePredictions(tournament?.id);
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
   const [filterRound, setFilterRound] = useState(() => getInitialFilters().round);
   const [filterGroup, setFilterGroup] = useState(() => getInitialFilters().group);
@@ -94,6 +94,8 @@ export default function PredictionsList() {
   const [currentPage, setCurrentPage] = useState(() => getInitialFilters().page);
   const [currentPredictions, setCurrentPredictions] = useState({});
   const [savingAll, setSavingAll] = useState(false);
+  const [clearingId, setClearingId] = useState(null);
+  const [clearingAll, setClearingAll] = useState(false);
   const [, setTick] = useState(0);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const navigate = useNavigate();
@@ -257,6 +259,50 @@ useEffect(() => {
     }));
   };
 
+  const handleClearPrediction = async (matchId) => {
+    setClearingId(String(matchId));
+    try {
+      await clearPrediction(matchId);
+      setCurrentPredictions((prev) => ({
+        ...prev,
+        [String(matchId)]: { home: '', away: '' },
+      }));
+      toast.success('Pronóstico eliminado');
+    } catch {
+      toast.error('Error al limpiar el pronóstico');
+    } finally {
+      setClearingId(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    const unlockedWithPrediction = filteredMatches.filter((match) => {
+      const matchId = String(match.id || match.matchId);
+      return !isPredictionLocked(match) && predictionsMap.has(matchId);
+    });
+
+    if (unlockedWithPrediction.length === 0) {
+      toast.error('No hay pronósticos desbloqueados para limpiar');
+      return;
+    }
+
+    setClearingAll(true);
+    try {
+      const ids = unlockedWithPrediction.map((m) => String(m.id || m.matchId));
+      await clearAllPredictions(ids);
+      setCurrentPredictions((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => { next[id] = { home: '', away: '' }; });
+        return next;
+      });
+      toast.success(`${ids.length} pronóstico(s) eliminado(s)`);
+    } catch {
+      toast.error('Error al limpiar los pronósticos');
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   // Guardar todos los cambios (solo los modificados y con resultados)
  const handleSaveAll = async () => {
   const toSave = [];
@@ -332,6 +378,15 @@ const hasChanges = useMemo(() => {
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{predictions.length} guardados</span>
           <button
+            onClick={handleClearAll}
+            disabled={clearingAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50"
+            title="Limpiar todos los pronósticos desbloqueados"
+          >
+            <RotateCcw className="w-4 h-4" />
+            {clearingAll ? 'Limpiando...' : 'Limpiar todos'}
+          </button>
+          <button
             onClick={() => setShowRulesModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
           >
@@ -399,31 +454,32 @@ const hasChanges = useMemo(() => {
                   const exactTotal = pointConfig.winner + pointConfig.difference + pointConfig.exact * 2;
                   const differenceTotal = pointConfig.winner + pointConfig.difference;
                   return (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">Segunda ronda (x{multiplier})</p>
-                        <p className="text-sm text-gray-700">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Segunda ronda (x{multiplier})</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
                           A partir de la Ronda de 32, 16avos, Cuartos, Semis, 3er puesto y Final, los puntos se multiplican por{' '}
-                          <span className="font-bold text-amber-700">x{multiplier}</span>.
+                          <span className="font-bold text-amber-700">x{multiplier}</span>.{' '}
+                          El pronóstico se evalúa sobre el resultado al final de los <span className="font-semibold">90 minutos reglamentarios</span>, sin contar tiempo extra ni penales.
                         </p>
                       </div>
-                      <p className="text-xs font-semibold text-amber-700">Ejemplos con resultado 2‑1 (x{multiplier}):</p>
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Ejemplos con resultado 2‑1 (x{multiplier}):</p>
                       <div className="space-y-2 text-sm">
-                        <div className="flex justify-between items-center bg-white/70 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700">Pronóstico 2-1 <span className="text-xs text-gray-400">(exacto)</span></span>
-                          <span className="text-amber-700 font-semibold">{exactTotal} × {multiplier} = {exactTotal * multiplier} pts</span>
+                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
+                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 2-1 <span className="text-xs text-gray-400 dark:text-gray-400">(exacto)</span></span>
+                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{exactTotal} × {multiplier} = {exactTotal * multiplier} pts</span>
                         </div>
-                        <div className="flex justify-between items-center bg-white/70 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700">Pronóstico 1-0 <span className="text-xs text-gray-400">(dif. correcta)</span></span>
-                          <span className="text-amber-700 font-semibold">{differenceTotal} × {multiplier} = {differenceTotal * multiplier} pts</span>
+                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
+                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 1-0 <span className="text-xs text-gray-400 dark:text-gray-400">(dif. correcta)</span></span>
+                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{differenceTotal} × {multiplier} = {differenceTotal * multiplier} pts</span>
                         </div>
-                        <div className="flex justify-between items-center bg-white/70 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700">Pronóstico 3-1 <span className="text-xs text-gray-400">(ganador + visitante exacto)</span></span>
-                          <span className="text-amber-700 font-semibold">{pointConfig.winner + pointConfig.exact} × {multiplier} = {(pointConfig.winner + pointConfig.exact) * multiplier} pts</span>
+                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
+                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 3-1 <span className="text-xs text-gray-400 dark:text-gray-400">(ganador + visitante exacto)</span></span>
+                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{pointConfig.winner + pointConfig.exact} × {multiplier} = {(pointConfig.winner + pointConfig.exact) * multiplier} pts</span>
                         </div>
-                        <div className="flex justify-between items-center bg-white/70 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700">Pronóstico 4-2 <span className="text-xs text-gray-400">(solo ganador)</span></span>
-                          <span className="text-amber-700 font-semibold">{pointConfig.winner} × {multiplier} = {pointConfig.winner * multiplier} pts</span>
+                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
+                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 4-2 <span className="text-xs text-gray-400 dark:text-gray-400">(solo ganador)</span></span>
+                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{pointConfig.winner} × {multiplier} = {pointConfig.winner * multiplier} pts</span>
                         </div>
                       </div>
                     </div>
@@ -706,6 +762,21 @@ const hasChanges = useMemo(() => {
                           tournament
                         )} pts
                       </span>
+                    </div>
+                  )}
+
+                  {/* Clear prediction button */}
+                  {!isLocked && savedPrediction && (
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={() => handleClearPrediction(matchId)}
+                        disabled={clearingId === String(matchId)}
+                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg transition disabled:opacity-50"
+                        title="Limpiar pronóstico"
+                      >
+                        <X className="w-3 h-3" />
+                        {clearingId === String(matchId) ? 'Limpiando...' : 'Limpiar pronóstico'}
+                      </button>
                     </div>
                   )}
                 </div>

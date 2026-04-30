@@ -29,6 +29,7 @@ const Standings = lazy(() => import('./components/tournaments/Standings'));
 const Participants = lazy(() => import('./components/tournaments/Participants'));
 const MatchDetail = lazy(() => import('./components/tournaments/MatchDetail'));
 const AdminTournament = lazy(() => import('./components/tournaments/AdminTournament'));
+const SuperAdminPanel = lazy(() => import('./pages/SuperAdminPanel'));
 
 function AppRoutes() {
   return (
@@ -80,6 +81,17 @@ function AppRoutes() {
             <PrivateRoute>
               <Layout>
                 <AdminTournament />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/admin/panel"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <SuperAdminPanel />
               </Layout>
             </PrivateRoute>
           }

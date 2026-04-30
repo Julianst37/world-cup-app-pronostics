@@ -5,7 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { SUPER_ADMIN_EMAIL } from '../../utils/constants';
 import toast from 'react-hot-toast';
 import { useNotifications } from '../../hooks/useNotifications';
-import { Bell, Moon, ShieldCheck, Sun } from 'lucide-react';
+import { Bell, Moon, ShieldCheck, Sun, LayoutDashboard } from 'lucide-react';
 import TeamAvatar from '../common/TeamAvatar';
 
 export default function Navbar() {
@@ -32,7 +32,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link to={currentUser ? "/dashboard" : "/"} className="flex items-center gap-2 font-bold text-xl hover:text-blue-200 transition">
-            <img src="/icons/logoBIA.png" alt="BIA Sports 2026" className="w-10 h-10 object-contain" />
+            <img src="/icons/logoBIA.png" alt="BIA Sports 2026" className="w-[110px] h-[110px] object-contain" />
             <span>BIA Sports 2026</span>
           </Link>
 
@@ -63,6 +63,17 @@ export default function Navbar() {
                   >
                     <ShieldCheck className="w-4 h-4" />
                     Admin Partidos
+                  </Link>
+                )}
+                {isSuperAdmin && (
+                  <Link
+                    to="/admin/panel"
+                    className={`flex items-center gap-2 hover:text-blue-200 transition font-medium ${
+                      location.pathname === '/admin/panel' ? 'text-blue-200' : ''
+                    }`}
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    Panel de Control
                   </Link>
                 )}
                 {/* Toggle dark mode */}
@@ -183,6 +194,15 @@ export default function Navbar() {
                 className="block py-2 hover:text-blue-200 transition"
               >
                 <ShieldCheck className="w-4 h-4 inline mr-1" /> Admin Partidos
+              </Link>
+            )}
+            {isSuperAdmin && (
+              <Link
+                to="/admin/panel"
+                onClick={() => setMenuOpen(false)}
+                className="block py-2 hover:text-blue-200 transition"
+              >
+                <LayoutDashboard className="w-4 h-4 inline mr-1" /> Panel de Control
               </Link>
             )}
             <button

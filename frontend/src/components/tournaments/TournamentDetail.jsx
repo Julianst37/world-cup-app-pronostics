@@ -4,7 +4,7 @@ import { useTournaments } from '../../hooks/useTournaments';
 import { useAuth } from '../../contexts/AuthContext';
 import Loading from '../common/Loading';
 import Error from '../common/Error';
-import { Home, ClipboardList, Trophy, Users, Settings } from 'lucide-react';
+import { Home, ClipboardList, Trophy, Users, Settings, Lock } from 'lucide-react';
 
 export default function TournamentDetail() {
   const { tournamentId } = useParams();
@@ -31,6 +31,28 @@ export default function TournamentDetail() {
 
   if (loading) return <Loading />;
   if (error) return <Error message={error} />;
+
+  if (tournament?.status === 'inactive') {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center px-6">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 p-10 shadow-sm">
+          <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-7 h-7 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Torneo desactivado</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+            El torneo <span className="font-semibold text-gray-700 dark:text-gray-200">"{tournament.name}"</span> ha sido desactivado por el administrador de la plataforma. No es posible acceder hasta que sea reactivado.
+          </p>
+          <Link
+            to="/dashboard"
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition text-sm"
+          >
+            Volver al Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const tabs = [
     { to: 'home', label: 'Inicio', Icon: Home },
