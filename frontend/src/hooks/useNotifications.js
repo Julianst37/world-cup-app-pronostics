@@ -3,6 +3,7 @@ import {
   collection,
   query,
   where,
+  or,
   onSnapshot,
   updateDoc,
   doc,
@@ -22,70 +23,42 @@ export function useNotifications() {
       return;
     }
 
-    const notificationsRef = collection(db, 'notifications');
-    const adminQuery = query(
-      notificationsRef,
-      where('adminId', '==', currentUser.uid)
+    // Single query with OR filter instead of two separate listeners
+    const q = query(
+      collection(db, 'notifications'),
+      or(
+        where('adminId', '==', currentUser.uid),
+        where('userId', '==', currentUser.uid)
+      )
     );
-    const userQuery = query(
-      notificationsRef,
-      where('userId', '==', currentUser.uid)
-    );
 
-    let adminNotifications = [];
-    let userNotifications = [];
-
-    const mergeNotifications = () => {
-      const merged = [...adminNotifications, ...userNotifications]
-        .filter((notification) => {
-          if (notification.adminId === currentUser.uid) {
-            return true;
-          }
-
-          if (notification.userId === currentUser.uid) {
-            return notification.type !== 'pending_approval';
-          }
-
-          return false;
-        })
-        .filter((notification, index, array) => array.findIndex((item) => item.id === notification.id) === index)
-        .sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-      setNotifications(merged);
-      setLoading(false);
-    };
-
-    const handleError = (err) => {
-      console.error('Error loading notifications:', err);
-      setLoading(false);
-    };
-
-    const unsubscribeAdmin = onSnapshot(
-      adminQuery,
+    const unsubscribe = onSnapshot(
+      q,
       (snapshot) => {
-        adminNotifications = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeNotifications();
+        const uid = currentUser.uid;
+        const merged = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((n) => {
+            if (n.adminId === uid) return true;
+            if (n.userId === uid) return n.type !== 'pending_approval';
+            return false;
+          })
+          .sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+        setNotifications(merged);
+        setLoading(false);
       },
-      handleError
+      (err) => {
+        console.error('Error loading notifications:', err);
+        setLoading(false);
+      }
     );
 
-    const unsubscribeUser = onSnapshot(
-      userQuery,
-      (snapshot) => {
-        userNotifications = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeNotifications();
-      },
-      handleError
-    );
-
-    return () => {
-      unsubscribeAdmin();
-      unsubscribeUser();
-    };
+    return unsubscribe;
   }, [currentUser]);
 
   const markAsRead = async (notificationId) => {

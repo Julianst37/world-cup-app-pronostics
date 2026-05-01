@@ -11,16 +11,23 @@ const getPreviousStandingsKey = (tournamentId) => `standings_${tournamentId}`;
 
 const getFallbackUser = () => ({ displayName: 'Usuario', username: '' });
 
+// Module-level cache so user profiles are fetched once per session, not on every snapshot
+const userProfileCache = new Map();
+
+async function fetchUserProfile(userId) {
+  if (userProfileCache.has(userId)) return userProfileCache.get(userId);
+  const userDoc = await getDoc(doc(db, 'users', userId));
+  const profile = userDoc.exists() ? userDoc.data() : getFallbackUser();
+  userProfileCache.set(userId, profile);
+  return profile;
+}
+
 async function buildStandingsEntries(participants, previousStandingsRef) {
   const withProfiles = await Promise.all(
-    participants.map(async (participant) => {
-      const userDoc = await getDoc(doc(db, 'users', participant.userId));
-
-      return {
-        ...participant,
-        user: userDoc.exists() ? userDoc.data() : getFallbackUser(),
-      };
-    })
+    participants.map(async (participant) => ({
+      ...participant,
+      user: await fetchUserProfile(participant.userId),
+    }))
   );
 
   withProfiles.sort((a, b) => (b.points || 0) - (a.points || 0));

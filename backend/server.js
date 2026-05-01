@@ -550,8 +550,8 @@ app.post('/api/predictions', async (req, res) => {
         .get(),
     ]);
   } catch (err) {
-    console.error('Firestore read error:', err);
-    res.status(500).json({ message: 'Error al consultar los datos' });
+    console.error('Firestore read error:', err.code, err.message);
+    res.status(500).json({ message: 'Error al consultar los datos', detail: err.message });
     return;
   }
 

@@ -87,7 +87,7 @@ export function usePredictions(tournamentId) {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Error al guardar el pronóstico');
+        throw new Error(data.detail ? `${data.message}: ${data.detail}` : data.message || 'Error al guardar el pronóstico');
       }
     },
     [currentUser, tournamentId]
