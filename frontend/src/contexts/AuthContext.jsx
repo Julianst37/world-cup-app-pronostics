@@ -14,7 +14,6 @@ import {
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { auth, db } from '../config/firebase';
-import { registerFCMToken } from '../hooks/usePushNotifications';
 
 const AuthContext = createContext(null);
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -331,7 +330,6 @@ export function AuthProvider({ children }) {
       if (user) {
         await fetchUserProfile(user.uid);
         startInactivityTracking();
-        registerFCMToken(user);
       } else {
         stopInactivityTracking();
         setUserProfile(null);

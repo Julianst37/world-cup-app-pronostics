@@ -17,7 +17,14 @@ export async function registerFCMToken(currentUser) {
     const supported = await isSupported();
     if (!supported) return;
 
-    const permission = await Notification.requestPermission();
+    // If already denied, don't prompt — browser will block it anyway
+    if (Notification.permission === 'denied') return;
+
+    // Only request if not yet granted (requires a user gesture in modern browsers)
+    let permission = Notification.permission;
+    if (permission !== 'granted') {
+      permission = await Notification.requestPermission();
+    }
     if (permission !== 'granted') return;
 
     const messaging = getMessaging(app);

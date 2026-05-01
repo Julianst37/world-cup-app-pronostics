@@ -56,22 +56,10 @@ export function useTournaments() {
 
         const existingDocs = tournamentDocs.filter((d) => d.exists());
 
-        const participantCounts = await Promise.all(
-          existingDocs.map((d) =>
-            getCountFromServer(
-              query(
-                collection(db, 'participants'),
-                where('tournamentId', '==', d.id),
-                where('status', '==', 'active')
-              )
-            )
-          )
-        );
-
-        const data = existingDocs.map((d, i) => ({
+        const data = existingDocs.map((d) => ({
           id: d.id,
           ...d.data(),
-          memberCount: participantCounts[i].data().count,
+          memberCount: d.data().memberCount ?? 0,
         }));
 
         setTournaments(data);
@@ -264,22 +252,10 @@ export function useTournaments() {
 
     const existingDocs = tournamentDocs.filter((d) => d.exists());
 
-    const participantCounts = await Promise.all(
-      existingDocs.map((d) =>
-        getCountFromServer(
-          query(
-            collection(db, 'participants'),
-            where('tournamentId', '==', d.id),
-            where('status', '==', 'active')
-          )
-        )
-      )
-    );
-
-    const data = existingDocs.map((d, i) => ({
+    const data = existingDocs.map((d) => ({
       id: d.id,
       ...d.data(),
-      memberCount: participantCounts[i].data().count,
+      memberCount: d.data().memberCount ?? 0,
     }));
 
     setTournaments(data);

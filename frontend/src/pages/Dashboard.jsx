@@ -138,7 +138,7 @@ export default function Dashboard() {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-700 to-indigo-700 rounded-2xl p-6 text-white">
-        <h1 className="text-2xl font-bold mb-1">
+        <h1 className="text-2xl font-bold mb-1 break-words min-w-0">
           ¡Hola, {userProfile?.displayName || currentUser?.email}!
         </h1>
         <p className="text-blue-200">
