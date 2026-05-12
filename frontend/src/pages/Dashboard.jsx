@@ -6,8 +6,8 @@ import Loading from '../components/common/Loading';
 import Modal from '../components/common/Modal';
 import toast from 'react-hot-toast';
 import { Trophy, Users, Link2, ArrowRight, Trash2, AlertTriangle, LogOut } from 'lucide-react';
-import { collection, query, where, getCountFromServer } from 'firebase/firestore';
-import { db } from '../config/firebase';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 export default function Dashboard() {
   const { currentUser, userProfile } = useAuth();
@@ -34,13 +34,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (fetchTournaments) fetchTournaments();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [fetchTournaments]);
-
   const handleJoin = async (e) => {
     e.preventDefault();
 
@@ -50,8 +43,8 @@ export default function Dashboard() {
       return;
     }
 
-    if (joinCode.trim().length !== 8) {
-      toast.error('El código debe tener 8 caracteres');
+    if (joinCode.trim().length < 6) {
+      toast.error('El código debe tener al menos 6 caracteres');
       return;
     }
 
@@ -70,7 +63,7 @@ export default function Dashboard() {
       setShowJoinModal(false);
       setJoinCode('');
     } catch (err) {
-      toast.error(err.message || 'Error al unirse al torneo');
+      toast.error(err.message || 'Error al unirse a la polla');
     } finally {
       setJoining(false);
     }
@@ -80,10 +73,12 @@ export default function Dashboard() {
     e.stopPropagation();
     setCheckingDelete(true);
     try {
-      const snap = await getCountFromServer(
-        query(collection(db, 'predictions'), where('tournamentId', '==', tournament.id))
-      );
-      setTournamentHasPredictions(snap.data().count > 0);
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/predictions?tournamentId=${tournament.id}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const preds = res.ok ? await res.json() : [];
+      setTournamentHasPredictions(preds.length > 0);
     } catch {
       setTournamentHasPredictions(false);
     } finally {
@@ -97,10 +92,10 @@ export default function Dashboard() {
     setDeleting(true);
     try {
       await deleteTournament(tournamentToDelete.id);
-      toast.success(`Torneo "${tournamentToDelete.name}" eliminado`);
+      toast.success(`Polla "${tournamentToDelete.name}" eliminada`);
       setTournamentToDelete(null);
     } catch {
-      toast.error('Error al eliminar el torneo');
+      toast.error('Error al eliminar la polla');
     } finally {
       setDeleting(false);
     }
@@ -116,14 +111,14 @@ export default function Dashboard() {
     setLeaving(true);
     try {
       await leaveTournament(tournamentToLeave.id);
-      toast.success(`Saliste del torneo "${tournamentToLeave.name}"`);
+      toast.success(`Saliste de la polla "${tournamentToLeave.name}"`);
       setTournamentToLeave(null);
     } catch (err) {
       if (err.code === 'has-predictions') {
         toast.error(err.message);
         setTournamentToLeave(null);
       } else {
-        toast.error('Error al salir del torneo');
+        toast.error('Error al salir de la polla');
       }
     } finally {
       setLeaving(false);
@@ -154,7 +149,7 @@ export default function Dashboard() {
           to="/tournaments/create"
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl text-center transition"
         >
-          + Crear Torneo
+          + Crear Polla
         </Link>
         <button
           onClick={() => setShowJoinModal(true)}
@@ -167,18 +162,18 @@ export default function Dashboard() {
       {/* Tournaments List */}
       <div>
         <h2 className="text-xl font-bold text-gray-800 mb-4">
-          Mis Torneos ({tournaments.length})
+          Mis Pollas ({tournaments.length})
         </h2>
         {tournaments.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
             <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No tienes torneos aún</h3>
-            <p className="text-gray-500 mb-6">Crea tu primer torneo o únete usando un código de invitación</p>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">No tienes pollas aún</h3>
+            <p className="text-gray-500 mb-6">Crea tu primera polla o únete usando un código de invitación</p>
             <Link
               to="/tournaments/create"
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl transition"
             >
-              Crear mi primer torneo
+              Crear mi primera polla
             </Link>
           </div>
         ) : (
@@ -188,7 +183,11 @@ export default function Dashboard() {
                 key={tournament.id}
                 onClick={() => {
                   if (tournament.status === 'inactive') {
-                    toast.error('Este torneo está desactivado y no se puede acceder');
+                    toast.error('Esta polla está desactivada y no se puede acceder');
+                    return;
+                  }
+                  if (tournament.participantStatus === 'pending') {
+                    toast('Tu solicitud está pendiente de aprobación', { icon: '⏳' });
                     return;
                   }
                   navigate(`/tournaments/${tournament.id}/home`);
@@ -196,6 +195,8 @@ export default function Dashboard() {
                 className={`bg-white rounded-xl border p-5 transition ${
                   tournament.status === 'inactive'
                     ? 'border-gray-200 opacity-70 cursor-not-allowed'
+                    : tournament.participantStatus === 'pending'
+                    ? 'border-yellow-200 opacity-80 cursor-not-allowed'
                     : 'border-gray-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
                 }`}
               >
@@ -220,6 +221,10 @@ export default function Dashboard() {
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
                           Admin
                         </span>
+                      ) : tournament.participantStatus === 'pending' ? (
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">
+                          Pendiente de aprobación
+                        </span>
                       ) : (
                         <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
                           Participante
@@ -232,16 +237,16 @@ export default function Dashboard() {
                       <button
                         onClick={(e) => handleDeleteClick(e, tournament)}
                         className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-                        title="Eliminar torneo"
+                        title="Eliminar polla"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
-                    {tournament.adminId !== currentUser?.uid && (
+                    {tournament.adminId !== currentUser?.uid && tournament.status !== 'finished' && tournament.participantStatus !== 'pending' && (
                       <button
                         onClick={(e) => handleLeaveClick(e, tournament)}
                         className="p-2 rounded-lg text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition"
-                        title="Salir del torneo"
+                        title="Salir de la polla"
                       >
                         <LogOut className="w-4 h-4" />
                       </button>
@@ -259,7 +264,7 @@ export default function Dashboard() {
       <Modal
         isOpen={!!tournamentToDelete}
         onClose={() => !deleting && setTournamentToDelete(null)}
-        title="Eliminar torneo"
+        title="Eliminar polla"
         size="sm"
       >
         {checkingDelete ? (
@@ -271,7 +276,7 @@ export default function Dashboard() {
               <div>
                 {tournamentHasPredictions ? (
                   <>
-                    <p className="font-semibold text-gray-800 mb-1">Este torneo tiene pronósticos guardados</p>
+                    <p className="font-semibold text-gray-800 mb-1">Esta polla tiene pronósticos guardados</p>
                     <p className="text-sm text-gray-600">
                       Al eliminar <span className="font-medium">"{tournamentToDelete?.name}"</span>, también se eliminarán
                       todos los pronósticos y participantes asociados. Esta acción no se puede deshacer.
@@ -281,7 +286,7 @@ export default function Dashboard() {
                   <>
                     <p className="font-semibold text-gray-800 mb-1">¿Confirmar eliminación?</p>
                     <p className="text-sm text-gray-600">
-                      ¿Estás seguro de que deseas eliminar el torneo <span className="font-medium">"{tournamentToDelete?.name}"</span>?
+                      ¿Estás seguro de que deseas eliminar la polla <span className="font-medium">"{tournamentToDelete?.name}"</span>?
                       Esta acción no se puede deshacer.
                     </p>
                   </>
@@ -312,7 +317,7 @@ export default function Dashboard() {
       <Modal
         isOpen={!!tournamentToLeave}
         onClose={() => !leaving && setTournamentToLeave(null)}
-        title="Salir del torneo"
+        title="Salir de la polla"
         size="sm"
       >
         <div className="space-y-4">
@@ -321,7 +326,7 @@ export default function Dashboard() {
             <div>
               <p className="font-semibold text-gray-800 mb-1">¿Confirmar salida?</p>
               <p className="text-sm text-gray-600">
-                ¿Estás seguro de que deseas salir del torneo{' '}
+                ¿Estás seguro de que deseas salir de la polla{' '}
                 <span className="font-medium">"{tournamentToLeave?.name}"</span>? Dejarás de ser
                 participante y no podrás volver a ingresar a menos que uses el código de invitación.
               </p>
@@ -350,7 +355,7 @@ export default function Dashboard() {
       <Modal
         isOpen={showJoinModal}
         onClose={() => setShowJoinModal(false)}
-        title="Unirse a un torneo"
+        title="Unirse a una polla"
         size="sm"
       >
         <form onSubmit={handleJoin} className="space-y-4">
@@ -373,7 +378,7 @@ export default function Dashboard() {
             disabled={joining}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50"
           >
-            {joining ? 'Uniéndose...' : 'Unirse al Torneo'}
+            {joining ? 'Uniéndose...' : 'Unirse a la Polla'}
           </button>
         </form>
       </Modal>

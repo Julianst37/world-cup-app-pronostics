@@ -18,7 +18,7 @@ export default function TournamentDetail() {
     const load = async () => {
       try {
         const data = await getTournament(tournamentId);
-        if (!data) throw new Error('Torneo no encontrado');
+        if (!data) throw new Error('Polla no encontrada');
         setTournament(data);
       } catch (err) {
         setError(err.message);
@@ -39,9 +39,9 @@ export default function TournamentDetail() {
           <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <Lock className="w-7 h-7 text-red-500" />
           </div>
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Torneo desactivado</h2>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Polla desactivada</h2>
           <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-            El torneo <span className="font-semibold text-gray-700 dark:text-gray-200">"{tournament.name}"</span> ha sido desactivado por el administrador de la plataforma. No es posible acceder hasta que sea reactivado.
+            La polla <span className="font-semibold text-gray-700 dark:text-gray-200">"{tournament.name}"</span> ha sido desactivada por el administrador de la plataforma. No es posible acceder hasta que sea reactivado.
           </p>
           <Link
             to="/dashboard"
@@ -54,14 +54,35 @@ export default function TournamentDetail() {
     );
   }
 
+  if (tournament?.participantStatus === 'pending') {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center px-6">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-yellow-200 dark:border-yellow-800 p-10 shadow-sm">
+          <div className="w-14 h-14 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-7 h-7 text-yellow-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Solicitud pendiente</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+            Tu solicitud para unirte a <span className="font-semibold text-gray-700 dark:text-gray-200">"{tournament.name}"</span> está pendiente de aprobación por parte del administrador.
+          </p>
+          <Link
+            to="/dashboard"
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition text-sm"
+          >
+            Volver al Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = tournament?.adminId === currentUser?.uid;
   const tabs = [
     { to: 'home', label: 'Inicio', Icon: Home },
     { to: 'predictions', label: 'Pronósticos', Icon: ClipboardList },
     { to: 'standings', label: 'Posiciones', Icon: Trophy },
-    { to: 'participants', label: 'Participantes', Icon: Users },
-    ...(tournament?.adminId === currentUser?.uid
-      ? [{ to: 'settings', label: 'Configuración', Icon: Settings }]
-      : []),
+    ...(isAdmin ? [{ to: 'participants', label: 'Participantes', Icon: Users }] : []),
+    ...(isAdmin ? [{ to: 'settings', label: 'Configuración', Icon: Settings }] : []),
   ];
 
   return (

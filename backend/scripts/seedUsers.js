@@ -1,5 +1,7 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const admin = require('firebase-admin');
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 
 // Initialize Firebase Admin
 const serviceAccount = {
@@ -17,8 +19,10 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-const db = admin.firestore();
 const auth = admin.auth();
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 const TEST_USERS = [
   {
@@ -100,33 +104,33 @@ async function seedUsers() {
         }
       }
 
-      // Create user document in Firestore
-      const userDoc = {
-        uid: userRecord.uid,
-        email: userData.email,
-        displayName: userData.displayName,
-        username: userData.username,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        isAdmin: userData.isAdmin,
-        isActive: true,
-        photoURL: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      };
-
-      await db.collection('users').doc(userRecord.uid).set(userDoc, { merge: true });
-      console.log(`✅ Created Firestore user: ${userData.username}`);
+      // Upsert user in PostgreSQL via Prisma
+      await prisma.user.upsert({
+        where: { id: userRecord.uid },
+        update: {},
+        create: {
+          id: userRecord.uid,
+          email: userData.email,
+          displayName: userData.displayName,
+          username: userData.username,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          isActive: true,
+          photoURL: null,
+        },
+      });
+      console.log(`✅ Created DB user: ${userData.username}`);
     } catch (error) {
       console.error(`❌ Error creating user ${userData.email}:`, error.message);
     }
   }
 
   console.log('\n✅ User seeding complete!');
-  console.log('\nTest users created (see .env.example for passwords):');
+  console.log('\nTest users created:');
   TEST_USERS.forEach((u) => {
     console.log(`  ${u.email}`);
   });
+  await prisma.$disconnect();
   process.exit(0);
 }
 

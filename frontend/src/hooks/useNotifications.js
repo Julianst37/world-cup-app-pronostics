@@ -1,20 +1,48 @@
-import { useState, useEffect } from 'react';
-import {
-  collection,
-  query,
-  where,
-  or,
-  onSnapshot,
-  updateDoc,
-  doc,
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './useAuth';
+import { invalidateTournamentsCache } from './useTournaments';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const POLL_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 export function useNotifications() {
   const { currentUser } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const intervalRef = useRef(null);
+  const prevApprovalRef = useRef(false);
+
+  const fetchNotifications = useCallback(async (user) => {
+    if (!user) return;
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/notifications`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) return;
+      const uid = user.uid;
+      const all = await res.json();
+      const merged = all
+        .filter((n) => {
+          if (n.adminId === uid) return true;
+          if (n.userId === uid) return n.type !== 'pending_approval';
+          return false;
+        })
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      const hasApproval = merged.some((n) => n.userId === uid && n.type === 'approved');
+      if (hasApproval && !prevApprovalRef.current) {
+        invalidateTournamentsCache(uid);
+      }
+      prevApprovalRef.current = hasApproval;
+
+      setNotifications(merged);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error loading notifications:', err);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -23,53 +51,30 @@ export function useNotifications() {
       return;
     }
 
-    // Single query with OR filter instead of two separate listeners
-    const q = query(
-      collection(db, 'notifications'),
-      or(
-        where('adminId', '==', currentUser.uid),
-        where('userId', '==', currentUser.uid)
-      )
-    );
+    fetchNotifications(currentUser);
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const uid = currentUser.uid;
-        const merged = snapshot.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((n) => {
-            if (n.adminId === uid) return true;
-            if (n.userId === uid) return n.type !== 'pending_approval';
-            return false;
-          })
-          .sort((a, b) => {
-            const aTime = a.createdAt?.toMillis?.() || 0;
-            const bTime = b.createdAt?.toMillis?.() || 0;
-            return bTime - aTime;
-          });
+    intervalRef.current = setInterval(() => {
+      fetchNotifications(currentUser);
+    }, POLL_INTERVAL_MS);
 
-        setNotifications(merged);
-        setLoading(false);
-      },
-      (err) => {
-        console.error('Error loading notifications:', err);
-        setLoading(false);
-      }
-    );
+    return () => clearInterval(intervalRef.current);
+  }, [currentUser, fetchNotifications]);
 
-    return unsubscribe;
-  }, [currentUser]);
-
-  const markAsRead = async (notificationId) => {
+  const markAsRead = useCallback(async (notificationId) => {
+    if (!currentUser) return;
     try {
-      await updateDoc(doc(db, 'notifications', notificationId), {
-        read: true,
+      const idToken = await currentUser.getIdToken();
+      await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${idToken}` },
       });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      );
     } catch (err) {
       console.error('Error marking as read:', err);
     }
-  };
+  }, [currentUser]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

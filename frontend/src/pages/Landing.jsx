@@ -23,14 +23,17 @@ export default function Landing() {
         </h1>
         <p className="text-xl text-blue-200 mb-10 max-w-2xl mx-auto">
           Compite con tus amigos pronosticando los resultados de BIA Sports 2026.
-          Crea torneos privados, gana puntos y lleva el control de la tabla de posiciones.
+          Crea pollas privadas, gana puntos y lleva el control de la tabla de posiciones.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           {currentUser ? (
             <Link
               to="/dashboard"
-              className="bg-white text-blue-900 hover:bg-blue-50 font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg"
+              className="font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg"
+              style={{ backgroundColor: '#ffffff', color: '#1e3a8a' }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#dbeafe'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#ffffff'}
             >
               Ir al Dashboard →
             </Link>
@@ -61,8 +64,8 @@ export default function Landing() {
           {[
             {
               Icon: Users,
-              title: 'Crea tu torneo',
-              desc: 'Crea un torneo privado con código de invitación único para jugar con tus amigos o compañeros.',
+              title: 'Crea tu polla',
+              desc: 'Crea una polla privada con código de invitación único para jugar con tus amigos o compañeros.',
             },
             {
               Icon: ClipboardList,
@@ -72,7 +75,7 @@ export default function Landing() {
             {
               Icon: Trophy,
               title: 'Gana puntos',
-              desc: 'Acumula puntos acertando el ganador o empate, los goles de cada equipo y la diferencia de goles. Cada torneo define su propio sistema de puntuación.',
+              desc: 'Acumula puntos acertando el ganador o empate, los goles de cada equipo y la diferencia de goles. Cada polla define su propio sistema de puntuación.',
             },
           ].map((feature) => (
             <div key={feature.title} className="bg-white/10 backdrop-blur rounded-2xl p-6 text-center">

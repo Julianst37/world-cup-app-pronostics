@@ -1,22 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  collection,
-  query,
-  getDocs,
-  getDoc,
-  doc,
-  updateDoc,
-  where,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { SUPER_ADMIN_EMAIL } from '../utils/constants';
 import Loading from '../components/common/Loading';
 import Modal from '../components/common/Modal';
 import toast from 'react-hot-toast';
 import { Trophy, Users, Search, LayoutDashboard, KeyRound } from 'lucide-react';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 export default function SuperAdminPanel() {
   const { currentUser } = useAuth();
@@ -56,44 +47,17 @@ export default function SuperAdminPanel() {
 
     const fetchTournaments = async () => {
       try {
-        const snap = await getDocs(collection(db, 'tournaments'));
-        const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        // Fetch admin profiles (batch by unique adminIds)
-        const adminIds = [...new Set(raw.map((t) => t.adminId).filter(Boolean))];
-        const adminDocs = await Promise.all(adminIds.map((id) => getDoc(doc(db, 'users', id))));
-        const adminMap = {};
-        adminDocs.forEach((d) => {
-          if (d.exists()) adminMap[d.id] = d.data();
+        const idToken = await currentUser.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/api/admin/tournaments`, {
+          headers: { Authorization: `Bearer ${idToken}` },
         });
-
-        // Fetch active participant counts
-        const countSnaps = await Promise.all(
-          raw.map((t) =>
-            getDocs(
-              query(
-                collection(db, 'participants'),
-                where('tournamentId', '==', t.id),
-                where('status', '==', 'active')
-              )
-            ).then((s) => s.size)
-          )
-        );
-
-        const enriched = raw.map((t, i) => ({
-          ...t,
-          participantCount: countSnaps[i],
-          adminName:
-            adminMap[t.adminId]?.displayName ||
-            adminMap[t.adminId]?.email ||
-            'Desconocido',
-          status: t.status || 'active',
-        }));
+        if (!res.ok) throw new Error();
+        const enriched = await res.json();
 
         setTournaments(enriched);
         setTournamentsLoaded(true);
       } catch {
-        toast.error('Error al cargar torneos');
+        toast.error('Error al cargar pollas');
       } finally {
         setTournamentsLoading(false);
       }
@@ -109,26 +73,12 @@ export default function SuperAdminPanel() {
 
     const fetchUsers = async () => {
       try {
-        const snap = await getDocs(collection(db, 'users'));
-        const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        // Count active tournaments per user
-        const countSnaps = await Promise.all(
-          raw.map((u) =>
-            getDocs(
-              query(
-                collection(db, 'participants'),
-                where('userId', '==', u.uid || u.id),
-                where('status', '==', 'active')
-              )
-            ).then((s) => s.size)
-          )
-        );
-
-        const enriched = raw.map((u, i) => ({
-          ...u,
-          tournamentCount: countSnaps[i],
-        }));
+        const idToken = await currentUser.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/api/admin/users`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) throw new Error();
+        const enriched = await res.json();
 
         setUsers(enriched);
         setUsersLoaded(true);
@@ -146,16 +96,41 @@ export default function SuperAdminPanel() {
     const newStatus = tournament.status === 'active' ? 'inactive' : 'active';
     setUpdatingStatus(tournament.id);
     try {
-      await updateDoc(doc(db, 'tournaments', tournament.id), {
-        status: newStatus,
-        updatedAt: serverTimestamp(),
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/tournaments/${tournament.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ status: newStatus }),
       });
+      if (!res.ok) throw new Error();
       setTournaments((prev) =>
         prev.map((t) => (t.id === tournament.id ? { ...t, status: newStatus } : t))
       );
-      toast.success(`Torneo ${newStatus === 'active' ? 'activado' : 'desactivado'}`);
+      toast.success(`Polla ${newStatus === 'active' ? 'activada' : 'desactivada'}`);
     } catch {
       toast.error('Error al cambiar estado');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  const handleFinishTournament = async (tournament) => {
+    if (!window.confirm(`¿Finalizar la polla "${tournament.name}"? Esta acción bloqueará pronósticos, inscripciones y cambios de configuración.`)) return;
+    setUpdatingStatus(tournament.id);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/tournaments/${tournament.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ status: 'finished' }),
+      });
+      if (!res.ok) throw new Error();
+      setTournaments((prev) =>
+        prev.map((t) => (t.id === tournament.id ? { ...t, status: 'finished' } : t))
+      );
+      toast.success(`Polla "${tournament.name}" finalizada`);
+    } catch {
+      toast.error('Error al finalizar la polla');
     } finally {
       setUpdatingStatus(null);
     }
@@ -166,10 +141,13 @@ export default function SuperAdminPanel() {
     const newIsActive = user.isActive === false ? true : false;
     setUpdatingUserStatus(uid);
     try {
-      await updateDoc(doc(db, 'users', uid), {
-        isActive: newIsActive,
-        updatedAt: serverTimestamp(),
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ isActive: newIsActive }),
       });
+      if (!res.ok) throw new Error();
       setUsers((prev) =>
         prev.map((u) => ((u.uid || u.id) === uid ? { ...u, isActive: newIsActive } : u))
       );
@@ -209,48 +187,15 @@ export default function SuperAdminPanel() {
 
     try {
       const uid = user.uid || user.id;
-
-      const participantsSnap = await getDocs(
-        query(
-          collection(db, 'participants'),
-          where('userId', '==', uid),
-          where('status', '==', 'active')
-        )
-      );
-
-      const items = await Promise.all(
-        participantsSnap.docs.map(async (partDoc) => {
-          const partData = partDoc.data();
-          const tDoc = await getDoc(doc(db, 'tournaments', partData.tournamentId));
-          if (!tDoc.exists()) return null;
-
-          // Rank: fetch all active participants, sort in JS to avoid composite index requirement
-          const allPartSnap = await getDocs(
-            query(
-              collection(db, 'participants'),
-              where('tournamentId', '==', partData.tournamentId),
-              where('status', '==', 'active')
-            )
-          );
-          const sorted = allPartSnap.docs
-            .map((d) => d.data())
-            .sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
-          const rank = sorted.findIndex((d) => d.userId === uid) + 1;
-          const total = sorted.length;
-
-          return {
-            tournamentId: partData.tournamentId,
-            tournamentName: tDoc.data().name,
-            points: partData.points ?? 0,
-            rank: rank > 0 ? rank : total,
-            total,
-          };
-        })
-      );
-
-      setUserTournaments(items.filter(Boolean));
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/${uid}/tournaments`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) throw new Error();
+      const items = await res.json();
+      setUserTournaments(items);
     } catch {
-      toast.error('Error al cargar torneos del usuario');
+      toast.error('Error al cargar pollas del usuario');
     } finally {
       setLoadingUserTournaments(false);
     }
@@ -297,7 +242,7 @@ export default function SuperAdminPanel() {
           }`}
         >
           <Trophy className="w-4 h-4" />
-          Torneos
+          Pollas
         </button>
         <button
           onClick={() => setActiveTab('users')}
@@ -323,7 +268,7 @@ export default function SuperAdminPanel() {
                 type="text"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
-                placeholder="Buscar por nombre del torneo..."
+                placeholder="Buscar por nombre de la polla..."
                 className="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100 placeholder-gray-400 text-sm"
               />
             </div>
@@ -344,7 +289,7 @@ export default function SuperAdminPanel() {
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
               {filteredTournaments.length === 0 ? (
                 <p className="text-center text-gray-500 dark:text-gray-400 py-14">
-                  No se encontraron torneos
+                  No se encontraron pollas
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -352,7 +297,7 @@ export default function SuperAdminPanel() {
                     <thead>
                       <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-200 dark:border-slate-600">
                         <th className="text-left px-5 py-3 font-semibold text-gray-600 dark:text-gray-300">
-                          Nombre del torneo
+                          Nombre de la polla
                         </th>
                         <th className="text-center px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">
                           Participantes
@@ -388,31 +333,49 @@ export default function SuperAdminPanel() {
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 t.status === 'active'
                                   ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                  : t.status === 'finished'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
                                   : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                               }`}
                             >
-                              {t.status === 'active' ? 'Activo' : 'Inactivo'}
+                              {t.status === 'active' ? 'Activo' : t.status === 'finished' ? 'Finalizado' : 'Inactivo'}
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-gray-600 dark:text-gray-300">
                             {t.adminName}
                           </td>
                           <td className="px-4 py-3.5 text-center">
-                            <button
-                              onClick={() => handleToggleStatus(t)}
-                              disabled={updatingStatus === t.id}
-                              className={`text-xs font-medium px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
-                                t.status === 'active'
-                                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                  : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30'
-                              }`}
-                            >
-                              {updatingStatus === t.id
-                                ? '...'
-                                : t.status === 'active'
-                                ? 'Desactivar'
-                                : 'Activar'}
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              {t.status !== 'finished' && (
+                                <button
+                                  onClick={() => handleToggleStatus(t)}
+                                  disabled={updatingStatus === t.id}
+                                  className={`text-xs font-medium px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
+                                    t.status === 'active'
+                                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                      : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30'
+                                  }`}
+                                >
+                                  {updatingStatus === t.id
+                                    ? '...'
+                                    : t.status === 'active'
+                                    ? 'Desactivar'
+                                    : 'Activar'}
+                                </button>
+                              )}
+                              {t.status !== 'finished' && (
+                                <button
+                                  onClick={() => handleFinishTournament(t)}
+                                  disabled={updatingStatus === t.id}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-lg transition disabled:opacity-50 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                                >
+                                  {updatingStatus === t.id ? '...' : 'Finalizar'}
+                                </button>
+                              )}
+                              {t.status === 'finished' && (
+                                <span className="text-xs text-gray-400 italic">Finalizada</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -424,8 +387,8 @@ export default function SuperAdminPanel() {
           )}
           {!tournamentsLoading && (
             <p className="mt-2.5 text-xs text-gray-400 dark:text-gray-500">
-              {filteredTournaments.length} torneo
-              {filteredTournaments.length !== 1 ? 's' : ''} encontrado
+              {filteredTournaments.length} polla
+              {filteredTournaments.length !== 1 ? 's' : ''} encontrada
               {filteredTournaments.length !== 1 ? 's' : ''}
             </p>
           )}
@@ -467,7 +430,7 @@ export default function SuperAdminPanel() {
                           Usuario
                         </th>
                         <th className="text-center px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">
-                          Torneos participando
+                          Pollas participando
                         </th>
                         <th className="text-center px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">
                           Estado
@@ -498,7 +461,7 @@ export default function SuperAdminPanel() {
                           <td className="px-4 py-3.5 text-center">
                             <button
                               onClick={() => handleOpenUserTournaments(u)}
-                              title="Ver torneos"
+                              title="Ver pollas"
                               className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition"
                             >
                               <Trophy className="w-3.5 h-3.5" />
@@ -561,7 +524,7 @@ export default function SuperAdminPanel() {
           setSelectedUser(null);
           setUserTournaments([]);
         }}
-        title={`Torneos de ${selectedUser?.displayName || selectedUser?.username || ''}`}
+        title={`Pollas de ${selectedUser?.displayName || selectedUser?.username || ''}`}
         size="md"
       >
         {loadingUserTournaments ? (
@@ -570,7 +533,7 @@ export default function SuperAdminPanel() {
           </div>
         ) : userTournaments.length === 0 ? (
           <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-            No participa en ningún torneo activo
+            No participa en ninguna polla activa
           </p>
         ) : (
           <div className="space-y-2 text-left">

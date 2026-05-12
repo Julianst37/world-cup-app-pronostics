@@ -1,18 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMatches } from '../../hooks/useMatches';
+import { usePlatformSettings } from '../../hooks/usePlatformSettings';
 import { usePredictions } from '../../hooks/usePredictions';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../../config/firebase';
 import { Trophy, BarChart3, Users, Link2, Copy, Check, Share2 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+import { PLAYOFF_ROUNDS, ROUNDS } from '../../utils/constants';
+import { loadParticipants, loadStandingsDoc, invalidateParticipantsCache } from '../../hooks/participantsCache';
 
 export default function TournamentHome() {
   const { tournament } = useOutletContext();
   const { currentUser, userProfile } = useAuth();
-  const { matches, loading: matchesLoading } = useMatches();
+  const { settings: platformSettings, loading: platformSettingsLoading } = usePlatformSettings();
+  const enabledRounds = useMemo(() => {
+    if (platformSettingsLoading) return null;
+    const { playoffRounds = {} } = platformSettings;
+    return [ROUNDS.GROUP_STAGE, ...PLAYOFF_ROUNDS.filter((r) => playoffRounds[r] === true)];
+  }, [platformSettings, platformSettingsLoading]);
+  const { matches, loading: matchesLoading } = useMatches({ rounds: enabledRounds });
   const { predictions, loading: predictionsLoading } = usePredictions(tournament?.id);
   const [activeParticipants, setActiveParticipants] = useState(null);
   const [userRank, setUserRank] = useState(null);
@@ -28,7 +35,7 @@ export default function TournamentHome() {
 
   const handleShare = async () => {
     const url = `${window.location.origin}/dashboard?join=${tournament.inviteCode}`;
-    const text = `¡Únete a mi torneo "${tournament.name}" en BIA Sports 2026! Usa el código: ${tournament.inviteCode} o haz clic aquí: ${url}`;
+    const text = `¡Únete a mi polla "${tournament.name}" en BIA Sports 2026! Usa el código: ${tournament.inviteCode} o haz clic aquí: ${url}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: 'BIA Sports 2026', text, url });
@@ -47,23 +54,39 @@ export default function TournamentHome() {
     }
 
     setParticipantsLoading(true);
-    const q = query(
-      collection(db, 'participants'),
-      where('tournamentId', '==', tournament.id),
-      where('status', '==', 'active')
-    );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const parts = snap.docs.map((d) => d.data());
+    const computeRank = (parts) => {
       setActiveParticipants(parts.length);
       const sorted = [...parts].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
       const idx = sorted.findIndex((p) => p.userId === currentUser?.uid);
       setUserRank(idx >= 0 ? idx + 1 : null);
       setParticipantsLoading(false);
-    });
+    };
 
-    return unsub;
-  }, [tournament?.id]);
+    currentUser.getIdToken().then((idToken) => {
+      // Always invalidate to get fresh participant list (handles new approvals)
+      invalidateParticipantsCache(tournament.id);
+
+      loadStandingsDoc(tournament.id, idToken)
+        .then((standingsData) => {
+          if (standingsData !== null && standingsData.length > 0) {
+            // Check if current user is in the standings doc
+            const inDoc = standingsData.some((e) => e.userId === currentUser?.uid);
+            if (inDoc) {
+              computeRank(standingsData);
+              return;
+            }
+            // User not in standings doc (newly approved) — fall through to load fresh participants
+          }
+          // Fallback: load fresh participants directly
+          return loadParticipants(tournament.id, idToken).then((all) => {
+            const active = all.filter((p) => p.status === 'active');
+            computeRank(active.length > 0 ? active : all);
+          });
+        })
+        .catch(() => setParticipantsLoading(false));
+    }).catch(() => setParticipantsLoading(false));
+  }, [tournament?.id, currentUser?.uid]);
 
   const completedMatches = matches.filter((m) => m.status === 'finished').length;
   const totalPoints = predictions.reduce((sum, p) => sum + (p.points || 0), 0);
@@ -117,10 +140,10 @@ export default function TournamentHome() {
       </div>
 
       {/* Invite code */}
-      {tournament?.inviteCode && (
+      {tournament?.inviteCode && tournament?.status !== 'finished' && (
         <div className="bg-blue-50 dark:bg-slate-800 rounded-xl border border-blue-200 dark:border-slate-700 p-5">
           <h3 className="font-semibold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Invita a tus amigos</h3>
-          <p className="text-sm text-blue-600 dark:text-blue-400 mb-2">Comparte este código para unirse al torneo:</p>
+          <p className="text-sm text-blue-600 dark:text-blue-400 mb-2">Comparte este código para unirse a la polla:</p>
           <button
             onClick={handleCopyCode}
             className="flex items-center gap-2 bg-white dark:bg-slate-700 border border-blue-300 dark:border-slate-600 hover:border-blue-500 dark:hover:border-slate-500 hover:bg-blue-50 dark:hover:bg-slate-600 rounded-lg px-4 py-2 transition group"

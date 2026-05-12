@@ -11,9 +11,10 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { auth, db } from '../config/firebase';
+import { auth } from '../config/firebase';
+import { invalidateUserProfileCache } from '../hooks/participantsCache';
+import { clearAllParticipantsLocalStorage } from '../hooks/participantsCache';
 
 const AuthContext = createContext(null);
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -152,13 +153,11 @@ export function AuthProvider({ children }) {
     let suffix = 1;
 
     while (true) {
-      const usernameQuery = query(collection(db, 'users'), where('username', '==', nextUsername));
-      const usernameSnapshot = await getDocs(usernameQuery);
-      const usernameTaken = usernameSnapshot.docs.some((snapshotDoc) => snapshotDoc.id !== currentUid);
-
-      if (!usernameTaken) {
-        return nextUsername;
-      }
+      const res = await fetch(
+        `${API_BASE_URL}/api/users/check-username?username=${encodeURIComponent(nextUsername)}&excludeUid=${encodeURIComponent(currentUid)}`
+      );
+      const { available } = await res.json().catch(() => ({ available: false }));
+      if (available) return nextUsername;
 
       const suffixText = String(suffix);
       nextUsername = `${baseUsername.slice(0, Math.max(20 - suffixText.length, 1))}${suffixText}`;
@@ -167,11 +166,14 @@ export function AuthProvider({ children }) {
   }
 
   async function ensureUserProfile(user, extraData = {}) {
-    const userRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userRef);
-    const existingData = userDoc.exists() ? userDoc.data() : {};
+    const idToken = await user.getIdToken();
 
-    let username = existingData.username || '';
+    // Try to fetch existing profile from backend
+    const existing = await fetch(`${API_BASE_URL}/api/users/${user.uid}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
+    let username = existing?.username || '';
     if (!username) {
       username = await generateUniqueUsername(
         extraData.username || user.displayName || user.email?.split('@')[0] || user.uid,
@@ -180,25 +182,21 @@ export function AuthProvider({ children }) {
     }
 
     const profileData = {
-      uid: user.uid,
-      email: user.email || existingData.email || '',
-      displayName: extraData.displayName || user.displayName || existingData.displayName || '',
+      email: user.email || existing?.email || '',
+      displayName: extraData.displayName || user.displayName || existing?.displayName || '',
       username,
-      favoriteTeam: extraData.favoriteTeam ?? existingData.favoriteTeam ?? '',
-      firstName: existingData.firstName || '',
-      lastName: existingData.lastName || '',
-      photoURL: user.photoURL || existingData.photoURL || null,
-      isActive: existingData.isActive ?? true,
-      isAdmin: existingData.isAdmin ?? false,
-      passwordChangeCount: existingData.passwordChangeCount ?? 0,
-      passwordChangeLimit: existingData.passwordChangeLimit ?? 3,
-      lastPasswordChangedAt: existingData.lastPasswordChangedAt ?? null,
-      createdAt: existingData.createdAt || serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      favoriteTeam: extraData.favoriteTeam ?? existing?.favoriteTeam ?? '',
+      firstName: existing?.firstName || '',
+      lastName: existing?.lastName || '',
+      photoURL: user.photoURL || existing?.photoURL || null,
     };
 
-    await setDoc(userRef, profileData, { merge: true });
-    return profileData;
+    const res = await fetch(`${API_BASE_URL}/api/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(profileData),
+    });
+    return res.ok ? res.json() : profileData;
   }
 
   async function signup(email, password, displayName, username) {
@@ -218,8 +216,11 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-    if (userDoc.exists() && userDoc.data().isActive === false) {
+    const idToken = await userCredential.user.getIdToken();
+    const profile = await fetch(`${API_BASE_URL}/api/users/${userCredential.user.uid}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    }).then((r) => r.ok ? r.json() : null).catch(() => null);
+    if (profile && profile.isActive === false) {
       await signOut(auth);
       const err = new Error('Tu cuenta está inactiva. Contacta al administrador.');
       err.code = 'auth/user-inactive';
@@ -230,8 +231,11 @@ export function AuthProvider({ children }) {
 
   async function loginWithGoogle() {
     const userCredential = await signInWithPopup(auth, googleProvider);
-    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-    if (userDoc.exists() && userDoc.data().isActive === false) {
+    const idToken = await userCredential.user.getIdToken();
+    const profile = await fetch(`${API_BASE_URL}/api/users/${userCredential.user.uid}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    }).then((r) => r.ok ? r.json() : null).catch(() => null);
+    if (profile && profile.isActive === false) {
       await signOut(auth);
       const err = new Error('Tu cuenta está inactiva. Contacta al administrador.');
       err.code = 'auth/user-inactive';
@@ -243,6 +247,7 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     stopInactivityTracking();
+    clearAllParticipantsLocalStorage();
     await signOut(auth);
     setUserProfile(null);
   }
@@ -272,14 +277,19 @@ export function AuthProvider({ children }) {
       await updateProfile(currentUser, { displayName: data.displayName });
     }
 
-    const userRef = doc(db, 'users', currentUser.uid);
-    await updateDoc(userRef, {
-      ...data,
-      updatedAt: serverTimestamp(),
+    const idToken = await currentUser.getIdToken();
+    const res = await fetch(`${API_BASE_URL}/api/users/${currentUser.uid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(data),
     });
-
-    const updated = await getDoc(userRef);
-    setUserProfile(updated.data());
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload.message || 'No fue posible actualizar el perfil');
+    }
+    const updated = await res.json();
+    setUserProfile(updated);
+    invalidateUserProfileCache(currentUser.uid);
   }
 
   async function updateUserEmail(newEmail, currentPassword) {
@@ -287,9 +297,11 @@ export function AuthProvider({ children }) {
     const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
     await reauthenticateWithCredential(currentUser, credential);
     await updateEmail(currentUser, newEmail);
-    await updateDoc(doc(db, 'users', currentUser.uid), {
-      email: newEmail,
-      updatedAt: serverTimestamp(),
+    const idToken = await currentUser.getIdToken(true);
+    await fetch(`${API_BASE_URL}/api/users/${currentUser.uid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ email: newEmail }),
     });
   }
 
@@ -303,8 +315,9 @@ export function AuthProvider({ children }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({ idToken, newPassword }),
+      body: JSON.stringify({ newPassword }),
     });
 
     const payload = await response.json().catch(() => ({}));
@@ -318,17 +331,21 @@ export function AuthProvider({ children }) {
   }
 
   async function fetchUserProfile(uid) {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    if (userDoc.exists()) {
-      setUserProfile(userDoc.data());
-    }
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) return;
+      const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (res.ok) setUserProfile(await res.json());
+    } catch (_) {}
   }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        await fetchUserProfile(user.uid);
+        fetchUserProfile(user.uid); // no await — no bloqueamos la app
         startInactivityTracking();
       } else {
         stopInactivityTracking();
