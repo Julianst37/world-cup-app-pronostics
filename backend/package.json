@@ -4,17 +4,23 @@
   "description": "Backend scripts for World Cup 2026 Pronostics App",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "npx prisma migrate deploy && node server.js",
+    "db:migrate": "npx prisma migrate deploy",
+    "db:generate": "npx prisma generate",
+    "db:studio": "npx prisma studio",
     "seed:matches": "node scripts/seedMatches.js",
     "seed:users": "node scripts/seedUsers.js"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "axios": "^1.6.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.4",
     "express": "^4.21.2",
     "firebase-admin": "^12.0.0",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "prisma": "^7.8.0"
   },
   "engines": {
     "node": ">=18.0.0"

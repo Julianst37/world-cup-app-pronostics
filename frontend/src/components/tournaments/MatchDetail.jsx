@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../config/firebase';
 import { useFavorites } from '../../hooks/useFavorites';
 import Loading from '../common/Loading';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatColombiaTime, getRoundDisplayName } from '../../utils/helpers';
 import { ArrowLeft, Lock, MapPin, Star } from 'lucide-react';
 import { getCanonicalTeamDisplay } from '../../utils/worldCupTeams';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 export default function MatchDetail() {
   const { matchId } = useParams();
@@ -45,66 +45,70 @@ const handleGoBack = () => {
 };
 
   useEffect(() => {
+    if (!currentUser) return;
     const load = async () => {
-      const [matchDoc, tournamentDoc] = await Promise.all([
-        getDoc(doc(db, 'matches', matchId)),
-        tournamentId ? getDoc(doc(db, 'tournaments', tournamentId)) : Promise.resolve(null),
+      const idToken = await currentUser.getIdToken();
+      const headers = { Authorization: `Bearer ${idToken}` };
+
+      const [matchRes, tournamentRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/matches?`, { headers }), // fallback: get all matches, find by id
+        tournamentId ? fetch(`${API_BASE_URL}/api/tournaments/${tournamentId}`, { headers }) : Promise.resolve(null),
       ]);
 
-      if (matchDoc.exists()) {
-        setMatch({ id: matchDoc.id, ...matchDoc.data() });
+      if (matchRes.ok) {
+        const allMatches = await matchRes.json();
+        const found = allMatches.find((m) => m.id === matchId);
+        if (found) setMatch(found);
       }
 
-      if (tournamentDoc?.exists()) {
-        setTournament({ id: tournamentDoc.id, ...tournamentDoc.data() });
+      if (tournamentRes?.ok) {
+        const tData = await tournamentRes.json();
+        setTournament(tData);
       } else {
         setTournament(null);
       }
 
       // Load active participants for the tournament
       if (tournamentId) {
-        const participantsSnap = await getDocs(
-          query(
-            collection(db, 'participants'),
-            where('tournamentId', '==', tournamentId),
-            where('status', '==', 'active')
-          )
-        );
-        const participantUsers = await Promise.all(
-          participantsSnap.docs.map(async (pd) => {
-            const data = pd.data();
-            if (data.userName) return { userId: data.userId, userName: data.userName };
-            // fallback: fetch user doc
-            try {
-              const userDoc = await getDoc(doc(db, 'users', data.userId));
-              return { userId: data.userId, userName: userDoc.data()?.displayName || data.userId };
-            } catch {
-              return { userId: data.userId, userName: data.userId };
-            }
-          })
-        );
+        const participantsRes = await fetch(`${API_BASE_URL}/api/tournaments/${tournamentId}/participants`, { headers });
+        const allParticipants = participantsRes.ok ? await participantsRes.json() : [];
+        const participantUsers = allParticipants
+          .filter((p) => p.status === 'active')
+          .map((p) => ({ userId: p.userId, userName: p.user?.displayName || p.displayName || p.userId }));
         setParticipants(participantUsers);
       }
 
-      const predictionConstraints = [where('matchId', '==', matchId)];
+      const params = new URLSearchParams({ matchId });
+      if (tournamentId) params.set('tournamentId', tournamentId);
+      // Get predictions for this match
+      const predsRes = await fetch(`${API_BASE_URL}/api/predictions?${params}`, { headers }).catch(() => null);
+      // Note: /api/predictions only returns current user's predictions
+      // For MatchDetail we need all predictions for the match — use the tournament predictions endpoint
+      let nextPredictions = [];
       if (tournamentId) {
-        predictionConstraints.push(where('tournamentId', '==', tournamentId));
+        const allPredsRes = await fetch(`${API_BASE_URL}/api/tournaments/${tournamentId}/predictions?matchId=${matchId}`, { headers });
+        if (allPredsRes.ok) {
+          const allPreds = await allPredsRes.json();
+          // Admin endpoint returns all predictions without matchId filter; participant endpoint already filters by matchId
+          nextPredictions = allPreds.filter((p) => String(p.matchId) === String(matchId));
+        } else if (predsRes?.ok) {
+          // Fallback to own predictions (match not finished yet)
+          nextPredictions = await predsRes.json();
+        }
+      } else if (predsRes?.ok) {
+        nextPredictions = await predsRes.json();
       }
-
-      const predsSnap = await getDocs(query(collection(db, 'predictions'), ...predictionConstraints));
-      const nextPredictions = predsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       nextPredictions.sort((left, right) => {
         if ((right.points ?? -1) !== (left.points ?? -1)) {
           return (right.points ?? -1) - (left.points ?? -1);
         }
-
         return String(left.userName || '').localeCompare(String(right.userName || ''), 'es', { sensitivity: 'base' });
       });
       setPredictions(nextPredictions);
       setLoading(false);
     };
     load();
-  }, [matchId, tournamentId]);
+  }, [matchId, tournamentId, currentUser]);
 
   if (loading) return <Loading />;
   if (!match) return <div className="text-center py-10 text-gray-500">Partido no encontrado</div>;
@@ -112,7 +116,7 @@ const handleGoBack = () => {
   const matchIsFavorite = isFavorite(matchId);
   const homeTeam = getCanonicalTeamDisplay(match.homeTeam, match.homeTeamCode, match.homeTeamFlag);
   const awayTeam = getCanonicalTeamDisplay(match.awayTeam, match.awayTeamCode, match.awayTeamFlag);
-  const locked = isMatchLocked(match, tournament);
+  const locked = isMatchLocked(match, tournament) || tournament?.showPredictionsAlways === true;
   const myPrediction = predictions.find((p) => p.userId === currentUser?.uid);
 
   // When locked, show all participants (with or without prediction)

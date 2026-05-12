@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUsers } from '../../hooks/useUsers';
-import { collection, query, where, onSnapshot, getDoc, doc, getDocs, getDocsFromServer } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { loadParticipants, invalidateParticipantsCache } from '../../hooks/participantsCache';
+import { invalidateTournamentsCache } from '../../hooks/useTournaments';
 import Loading from '../common/Loading';
 import Modal from '../common/Modal';
 import toast from 'react-hot-toast';
@@ -21,29 +21,20 @@ const ITEMS_PER_PAGE = 10;
 
 const getFallbackUser = () => ({ displayName: 'Usuario desconocido', email: '', username: '' });
 
-async function buildParticipantsEntries(data) {
-  const withProfiles = await Promise.all(
-    data.map(async (participant) => {
-      const userDoc = await getDoc(doc(db, 'users', participant.userId));
-
-      return {
-        ...participant,
-        user: userDoc.exists() ? userDoc.data() : getFallbackUser(),
-      };
-    })
-  );
-
-  withProfiles.sort((a, b) => {
-    return (a.user?.displayName || '').localeCompare(b.user?.displayName || '');
-  });
-
+function buildParticipantsEntries(data) {
+  // loadParticipants already returns flat objects with displayName, username, etc.
+  const withProfiles = data.map((p) => ({
+    ...p,
+    user: { displayName: p.displayName, username: p.username, photoURL: p.photoURL, favoriteTeam: p.favoriteTeam, email: p.email },
+  }));
+  withProfiles.sort((a, b) => (a.user?.displayName || '').localeCompare(b.user?.displayName || ''));
   return withProfiles;
 }
 
 export default function Participants() {
   const { tournament } = useOutletContext();
   const { currentUser } = useAuth();
-  const { updateParticipantStatus, removeParticipant } = useUsers(tournament?.id);
+  const { updateParticipantStatus, removeParticipant } = useUsers(null);
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -57,66 +48,31 @@ export default function Participants() {
     if (!tournament?.id) return;
 
     let isMounted = true;
-    let hasProcessedServerSnapshot = false;
     setLoading(true);
     setParticipants([]);
 
-    const q = query(
-      collection(db, 'participants'),
-      where('tournamentId', '==', tournament.id)
-    );
-
-    const hydrateParticipants = async (data) => {
-      const withProfiles = await buildParticipantsEntries(data);
-
-      if (!isMounted) {
-        return;
-      }
-
+    const hydrateParticipants = (data) => {
+      const withProfiles = buildParticipantsEntries(data);
+      if (!isMounted) return;
       setParticipants(withProfiles);
       setLoading(false);
     };
 
-    let unsubscribe = () => {};
-
     const initializeParticipants = async () => {
       try {
-        let initialSnapshot;
-
-        try {
-          initialSnapshot = await getDocsFromServer(q);
-          hasProcessedServerSnapshot = true;
-        } catch (_) {
-          initialSnapshot = await getDocs(q);
-        }
-
-        if (!isMounted) {
-          return;
-        }
-
-        await hydrateParticipants(initialSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-
-        unsubscribe = onSnapshot(q, async (snapshot) => {
-          if (hasProcessedServerSnapshot && snapshot.metadata.fromCache) {
-            return;
-          }
-
-          hasProcessedServerSnapshot = true;
-          await hydrateParticipants(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-        });
+        const idToken = await currentUser?.getIdToken();
+        // Always fetch fresh so leaving/removed participants disappear immediately
+        invalidateParticipantsCache(tournament.id);
+        const data = await loadParticipants(tournament.id, idToken);
+        if (!isMounted) return;
+        hydrateParticipants(data);
       } catch (_) {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
     initializeParticipants();
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
+    return () => { isMounted = false; };
   }, [tournament?.id]);
 
   if (loading) return <Loading />;
@@ -158,6 +114,8 @@ export default function Participants() {
     try {
       await updateParticipantStatus(participantId, newStatus);
       toast.success('Estado actualizado');
+      invalidateParticipantsCache(tournament.id);
+      setParticipants((prev) => prev.map((p) => p.id === participantId ? { ...p, status: newStatus } : p));
     } catch {
       toast.error('Error al actualizar estado');
     }
@@ -175,6 +133,9 @@ export default function Participants() {
       await removeParticipant(participantId);
       toast.success('Participante eliminado');
       setConfirmDelete(null);
+      invalidateParticipantsCache(tournament.id);
+      invalidateTournamentsCache(currentUser?.uid);
+      setParticipants((prev) => prev.filter((p) => p.id !== participantId));
     } catch {
       toast.error('Error al eliminar participante');
     } finally {
@@ -240,6 +201,9 @@ export default function Participants() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
+                    {tournament?.status === 'finished' ? (
+                      <span className="text-xs text-gray-400 italic">Polla finalizada</span>
+                    ) : (
                     <div className="grid grid-cols-[minmax(0,1fr)_32px] items-center justify-center gap-2 max-w-[220px] mx-auto">
                       <select
                         value={p.status}
@@ -262,6 +226,7 @@ export default function Participants() {
                       )}
                       {p.userId === currentUser?.uid && <div className="w-8 h-8" aria-hidden="true" />}
                     </div>
+                    )}
                   </td>
                 </tr>
               ))}

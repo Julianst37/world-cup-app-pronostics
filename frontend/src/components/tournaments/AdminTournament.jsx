@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
-import { db } from '../../config/firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { useMatches } from '../../hooks/useMatches';
+import { useMatches, bumpMatchesVersion, getMatchFromCache } from '../../hooks/useMatches';
+import { invalidateParticipantsCache, writeStandingsDoc } from '../../hooks/participantsCache';
 import { usePlatformSettings } from '../../hooks/usePlatformSettings';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 import {
   DEFAULT_GLOBAL_ROUND_SETTINGS,
   PLAYOFF_ROUNDS,
   ROUNDS,
   SUPER_ADMIN_EMAIL,
 } from '../../utils/constants';
-import { calculateTournamentPredictionPoints, formatColombiaTime, getRoundDisplayName, isPlayoffRound, normalizeRoundName } from '../../utils/helpers';
+import { formatColombiaTime, getRoundDisplayName, isPlayoffRound, normalizeRoundName } from '../../utils/helpers';
 import { getCanonicalTeamDisplay, SORTED_WORLD_CUP_2026_TEAMS } from '../../utils/worldCupTeams';
 import Loading from '../common/Loading';
 import Modal from '../common/Modal';
@@ -162,82 +163,23 @@ function toOptionalScore(value) {
   return Number.isInteger(numericValue) ? numericValue : null;
 }
 
-async function recalculateTournamentPointsForMatch(matchId, finalizedMatch) {
-  const impactedPredictionsSnapshot = await getDocs(
-    query(collection(db, 'predictions'), where('matchId', '==', matchId))
-  );
-
-  if (impactedPredictionsSnapshot.empty) {
-    return;
-  }
-
-  const tournamentIds = [...new Set(impactedPredictionsSnapshot.docs.map((docSnapshot) => docSnapshot.data().tournamentId).filter(Boolean))];
-
-  for (const tournamentId of tournamentIds) {
-    const [tournamentSnapshot, tournamentPredictionsSnapshot, participantsSnapshot] = await Promise.all([
-      getDoc(doc(db, 'tournaments', tournamentId)),
-      getDocs(query(collection(db, 'predictions'), where('tournamentId', '==', tournamentId))),
-      getDocs(query(collection(db, 'participants'), where('tournamentId', '==', tournamentId))),
-    ]);
-
-    if (!tournamentSnapshot.exists()) {
-      continue;
-    }
-
-    const tournament = { id: tournamentSnapshot.id, ...tournamentSnapshot.data() };
-    const tournamentPredictions = tournamentPredictionsSnapshot.docs.map((docSnapshot) => ({
-      id: docSnapshot.id,
-      ref: docSnapshot.ref,
-      ...docSnapshot.data(),
-    }));
-
-    const matchIds = [...new Set(tournamentPredictions.map((prediction) => prediction.matchId).filter(Boolean))];
-    const matchSnapshots = await Promise.all(
-      matchIds.map(async (predictionMatchId) => {
-        if (predictionMatchId === matchId) {
-          return [predictionMatchId, finalizedMatch];
-        }
-
-        const predictionMatchSnapshot = await getDoc(doc(db, 'matches', predictionMatchId));
-        return [predictionMatchId, predictionMatchSnapshot.exists() ? { id: predictionMatchSnapshot.id, ...predictionMatchSnapshot.data() } : null];
-      })
-    );
-
-    const matchMap = new Map(matchSnapshots);
-    const participantTotals = new Map(
-      participantsSnapshot.docs.map((participantSnapshot) => [participantSnapshot.data().userId, 0])
-    );
-    const batch = writeBatch(db);
-
-    tournamentPredictions.forEach((prediction) => {
-      const predictionMatch = matchMap.get(prediction.matchId);
-      const nextPoints = predictionMatch?.status === 'finished'
-        ? calculateTournamentPredictionPoints(prediction.prediction, predictionMatch, tournament)
-        : null;
-
-      if (prediction.points !== nextPoints) {
-        batch.set(prediction.ref, { points: nextPoints, updatedAt: serverTimestamp() }, { merge: true });
-      }
-
-      if (nextPoints !== null) {
-        participantTotals.set(prediction.userId, (participantTotals.get(prediction.userId) || 0) + nextPoints);
-      }
+async function recalculateTournamentPointsForMatch(matchId, finalizedMatch, idToken) {
+  try {
+    await fetch(`${API_BASE_URL}/api/recalculate-match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ matchId, match: finalizedMatch }),
     });
-
-    participantsSnapshot.docs.forEach((participantSnapshot) => {
-      const nextTotal = participantTotals.get(participantSnapshot.data().userId) || 0;
-      if ((participantSnapshot.data().points || 0) !== nextTotal) {
-        batch.set(participantSnapshot.ref, { points: nextTotal, updatedAt: serverTimestamp() }, { merge: true });
-      }
-    });
-
-    await batch.commit();
+    // Invalidate standings cache for all tournaments (we don't know which ones changed)
+    writeStandingsDoc && undefined; // no-op; cache will be invalidated on next load
+  } catch (err) {
+    console.error('recalculateTournamentPointsForMatch error:', err);
   }
 }
 
 export default function AdminTournament() {
   const { currentUser } = useAuth();
-  const { matches, loading: matchesLoading } = useMatches();
+  const { matches, loading: matchesLoading, invalidate: invalidateMatches } = useMatches();
   const { settings, loading: settingsLoading, updateSettings } = usePlatformSettings();
   const [filterRound, setFilterRound] = useState(ROUNDS.GROUP_STAGE);
   const [filterGroup, setFilterGroup] = useState('all');
@@ -395,7 +337,13 @@ export default function AdminTournament() {
     setSavingMatchId(`${matchId}:teams`);
     try {
       const payload = buildMatchPayload(match, nextFormState);
-      await setDoc(doc(db, 'matches', matchId), payload, { merge: true });
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/matches/${matchId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Error');
       toast.success('Llave actualizada');
     } catch (error) {
       toast.error(error.message || 'No fue posible guardar la llave');
@@ -425,9 +373,7 @@ export default function AdminTournament() {
   };
 
   const buildMatchPayload = (match, formState) => {
-    const payload = {
-      updatedAt: serverTimestamp(),
-    };
+    const payload = {};
 
     if (isPlayoffRound(match.round)) {
       const homeTeam = SORTED_WORLD_CUP_2026_TEAMS.find((team) => team.code === formState.homeTeamCode);
@@ -482,13 +428,20 @@ export default function AdminTournament() {
         awayScore,
         status: 'finished',
       };
-
-      await setDoc(doc(db, 'matches', matchId), payload, { merge: true });
-      await recalculateTournamentPointsForMatch(matchId, {
-        ...match,
-        ...payload,
-        id: matchId,
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/matches/${matchId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Error');
+      const finalizedMatch = { ...match, ...payload, id: matchId };
+      await Promise.all([
+        recalculateTournamentPointsForMatch(matchId, finalizedMatch, idToken),
+        bumpMatchesVersion(idToken, finalizedMatch),
+      ]);
+      invalidateParticipantsCache(match?.tournamentId);
+      invalidateMatches();
       toast.success('Encuentro finalizado correctamente');
     } catch (error) {
       toast.error(error.message || 'No fue posible finalizar el encuentro');
@@ -498,7 +451,7 @@ export default function AdminTournament() {
   };
 
   const handleClearMatchResult = async (match, options = {}) => {
-    const { showToast = true, manageSavingState = true } = options;
+    const { showToast = true, manageSavingState = true, skipVersionBump = false } = options;
     const matchId = getMatchDocumentId(match);
     if (!matchId) {
       if (showToast) {
@@ -512,22 +465,25 @@ export default function AdminTournament() {
     }
     try {
       const payload = {
-        updatedAt: serverTimestamp(),
         homeScore: null,
         awayScore: null,
         status: 'scheduled',
       };
-
-      await setDoc(doc(db, 'matches', matchId), payload, { merge: true });
-      syncMatchForm(matchId, { homeScore: '', awayScore: '' });
-      await recalculateTournamentPointsForMatch(matchId, {
-        ...match,
-        ...payload,
-        id: matchId,
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/matches/${matchId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Error');
+      syncMatchForm(matchId, { homeScore: '', awayScore: '' });
+      const tasks = [recalculateTournamentPointsForMatch(matchId, { ...match, ...payload, id: matchId }, idToken)];
+      if (!skipVersionBump) tasks.push(bumpMatchesVersion(idToken, { ...match, ...payload, id: matchId }));
+      await Promise.all(tasks);
       if (showToast) {
         toast.success('Resultado limpiado correctamente');
       }
+      invalidateMatches();
     } catch (error) {
       if (showToast) {
         toast.error(error.message || 'No fue posible limpiar el resultado');
@@ -541,7 +497,7 @@ export default function AdminTournament() {
   };
 
   const handleUnfinishMatch = async (match, options = {}) => {
-    const { showToast = true, manageSavingState = true } = options;
+    const { showToast = true, manageSavingState = true, skipVersionBump = false } = options;
     const matchId = getMatchDocumentId(match);
     if (!matchId) {
       if (showToast) {
@@ -559,25 +515,28 @@ export default function AdminTournament() {
     }
     try {
       const payload = {
-        updatedAt: serverTimestamp(),
         homeScore,
         awayScore,
         status: 'scheduled',
       };
-
-      await setDoc(doc(db, 'matches', matchId), payload, { merge: true });
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/matches/${matchId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Error');
       syncMatchForm(matchId, {
         homeScore: homeScore === null ? '' : String(homeScore),
         awayScore: awayScore === null ? '' : String(awayScore),
       });
-      await recalculateTournamentPointsForMatch(matchId, {
-        ...match,
-        ...payload,
-        id: matchId,
-      });
+      const tasks = [recalculateTournamentPointsForMatch(matchId, { ...match, ...payload, id: matchId }, idToken)];
+      if (!skipVersionBump) tasks.push(bumpMatchesVersion(idToken, { ...match, ...payload, id: matchId }));
+      await Promise.all(tasks);
       if (showToast) {
         toast.success('El partido volvió a estado pendiente');
       }
+      invalidateMatches();
     } catch (error) {
       if (showToast) {
         toast.error(error.message || 'No fue posible quitar el estado finalizado');
@@ -600,10 +559,13 @@ export default function AdminTournament() {
 
     setSavingMatchId('bulk:clear');
     try {
+      const idToken = await currentUser.getIdToken();
       for (const match of matchesToClear) {
-        await handleClearMatchResult(match, { showToast: false, manageSavingState: false });
+        await handleClearMatchResult(match, { showToast: false, manageSavingState: false, skipVersionBump: true });
       }
+      await bumpMatchesVersion(idToken, null); // full invalidation after bulk
       toast.success('Se limpiaron los resultados de los partidos filtrados');
+      invalidateMatches();
     } catch (error) {
       toast.error(error.message || 'No fue posible limpiar algunos resultados');
     } finally {
@@ -621,10 +583,13 @@ export default function AdminTournament() {
 
     setSavingMatchId('bulk:unfinish');
     try {
+      const idToken = await currentUser.getIdToken();
       for (const match of matchesToUnfinish) {
-        await handleUnfinishMatch(match, { showToast: false, manageSavingState: false });
+        await handleUnfinishMatch(match, { showToast: false, manageSavingState: false, skipVersionBump: true });
       }
+      await bumpMatchesVersion(idToken, null); // full invalidation after bulk
       toast.success('Los partidos filtrados volvieron a estado pendiente');
+      invalidateMatches();
     } catch (error) {
       toast.error(error.message || 'No fue posible actualizar algunos partidos');
     } finally {
@@ -656,7 +621,6 @@ export default function AdminTournament() {
 
     try {
       const payload = {
-        updatedAt: serverTimestamp(),
         homeTeam: '',
         homeTeamCode: '',
         homeTeamFlag: '',
@@ -668,8 +632,13 @@ export default function AdminTournament() {
         status: 'scheduled',
         configured: false,
       };
-
-      await setDoc(doc(db, 'matches', matchId), payload, { merge: true });
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/matches/${matchId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Error');
       syncMatchForm(matchId, {
         homeTeamCode: '',
         awayTeamCode: '',
@@ -680,11 +649,12 @@ export default function AdminTournament() {
         ...match,
         ...payload,
         id: matchId,
-      });
+      }, idToken);
 
       if (showToast) {
         toast.success('Llave limpiada correctamente');
       }
+      invalidateMatches();
     } catch (error) {
       if (showToast) {
         toast.error(error.message || 'No fue posible limpiar la llave');
@@ -709,6 +679,7 @@ export default function AdminTournament() {
         await handleClearMatchBracket(match, { showToast: false, manageSavingState: false });
       }
       toast.success('Se limpiaron las llaves de los partidos filtrados');
+      invalidateMatches();
     } catch (error) {
       toast.error(error.message || 'No fue posible limpiar algunas llaves');
     } finally {
@@ -775,7 +746,7 @@ export default function AdminTournament() {
       <div className="rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex items-center gap-2">
           <Trophy className="h-5 w-5 text-amber-500" />
-          <h3 className="text-lg font-semibold text-gray-800">Habilitar rondas finales para todos los torneos</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Habilitar rondas finales para todas las pollas</h3>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -977,7 +948,8 @@ export default function AdminTournament() {
                           inputMode="numeric"
                           value={formState.homeScore}
                           onChange={(event) => handleScoreChange(matchId, 'homeScore', event.target.value)}
-                          className="w-12 h-10 text-center text-lg font-bold border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                          disabled={match.status === 'finished'}
+                          className="w-12 h-10 text-center text-lg font-bold border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
                           placeholder="-"
                           maxLength={2}
                         />
@@ -987,7 +959,8 @@ export default function AdminTournament() {
                           inputMode="numeric"
                           value={formState.awayScore}
                           onChange={(event) => handleScoreChange(matchId, 'awayScore', event.target.value)}
-                          className="w-12 h-10 text-center text-lg font-bold border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                          disabled={match.status === 'finished'}
+                          className="w-12 h-10 text-center text-lg font-bold border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
                           placeholder="-"
                           maxLength={2}
                         />
@@ -1022,23 +995,27 @@ export default function AdminTournament() {
                       <p className="text-xs text-blue-600">Guardando llaves...</p>
                     )}
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleFinalizeMatch(match)}
-                        disabled={isSavingTeams || isFinalizing || isClearing || isUnfinishing || isClearingBracket || !canFinalizeMatch}
-                        className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg transition disabled:opacity-50"
-                      >
-                        {isFinalizing ? 'Finalizando...' : match.status === 'finished' ? 'Actualizar resultado' : 'Finalizar encuentro'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openActionModal({ type: 'clear-match', match })}
-                        disabled={isSavingTeams || isFinalizing || isClearing || isUnfinishing || isClearingBracket}
-                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                      >
-                        <Eraser className="h-3.5 w-3.5" />
-                        {isClearing ? 'Limpiando...' : 'Limpiar resultado'}
-                      </button>
+                      {match.status !== 'finished' && (
+                        <button
+                          type="button"
+                          onClick={() => handleFinalizeMatch(match)}
+                          disabled={isSavingTeams || isFinalizing || isClearing || isUnfinishing || isClearingBracket || !canFinalizeMatch}
+                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg transition disabled:opacity-50"
+                        >
+                          {isFinalizing ? 'Finalizando...' : 'Finalizar encuentro'}
+                        </button>
+                      )}
+                      {match.status !== 'finished' && (
+                        <button
+                          type="button"
+                          onClick={() => openActionModal({ type: 'clear-match', match })}
+                          disabled={isSavingTeams || isFinalizing || isClearing || isUnfinishing || isClearingBracket}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                        >
+                          <Eraser className="h-3.5 w-3.5" />
+                          {isClearing ? 'Limpiando...' : 'Limpiar resultado'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openActionModal({ type: 'unfinish-match', match })}

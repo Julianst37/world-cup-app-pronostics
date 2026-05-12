@@ -11,6 +11,7 @@ import { getCanonicalTeamDisplay } from '../../utils/worldCupTeams';
 import toast from 'react-hot-toast';
 import { BookOpen, MapPin, Save, Star, X, RotateCcw } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
+import { PLAYOFF_ROUNDS, ROUNDS } from '../../utils/constants';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -82,8 +83,14 @@ const ResultBadge = ({ result }) => {
 
 export default function PredictionsList() {
   const { tournament } = useOutletContext();
-  const { matches, loading } = useMatches();
+  // Platform settings must come before useMatches so we can pass the enabled rounds
   const { settings: platformSettings, loading: platformSettingsLoading } = usePlatformSettings();
+  const enabledRounds = useMemo(() => {
+    if (platformSettingsLoading) return null; // defer until settings are known
+    const { playoffRounds = {} } = platformSettings;
+    return [ROUNDS.GROUP_STAGE, ...PLAYOFF_ROUNDS.filter((r) => playoffRounds[r] === true)];
+  }, [platformSettings, platformSettingsLoading]);
+  const { matches, loading } = useMatches({ rounds: enabledRounds });
   const { predictions, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions } = usePredictions(tournament?.id);
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
   const [filterRound, setFilterRound] = useState(() => getInitialFilters().round);
@@ -98,6 +105,7 @@ export default function PredictionsList() {
   const [clearingAll, setClearingAll] = useState(false);
   const [, setTick] = useState(0);
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [rulesTab, setRulesTab] = useState('primera');
   const navigate = useNavigate();
 
   // Re-evalúa el estado de bloqueo cada 30 segundos sin necesitar refrescar la página
@@ -330,23 +338,49 @@ useEffect(() => {
 
   setSavingAll(true);
   try {
-    await Promise.all(
+    const results = await Promise.allSettled(
       toSave.map(([matchId, pred]) =>
         savePrediction(matchId, parseInt(pred.home), parseInt(pred.away))
       )
     );
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    toast.success(`${toSave.length} pronóstico(s) guardado(s)`);
+
+    const failed = [];
+    let hasLockError = false;
+
+    results.forEach((result, idx) => {
+      if (result.status === 'rejected') {
+        const [matchId] = toSave[idx];
+        failed.push(matchId);
+        const msg = result.reason?.message || '';
+        if (msg.includes('plazo para pronosticar') || msg.includes('bloqueado')) {
+          hasLockError = true;
+        }
+      }
+    });
+
+    // Revert inputs for failed predictions to their last saved value
+    if (failed.length > 0) {
+      setCurrentPredictions((prev) => {
+        const next = { ...prev };
+        failed.forEach((matchId) => {
+          const existing = predictionsMap.get(String(matchId));
+          next[String(matchId)] = {
+            home: existing?.prediction?.homeScore ?? '',
+            away: existing?.prediction?.awayScore ?? '',
+          };
+        });
+        return next;
+      });
+    }
+
+    const saved = toSave.length - failed.length;
+    if (saved > 0) toast.success(`${saved} pronóstico(s) guardado(s)`);
+    if (hasLockError) toast.error('Uno o más pronósticos ya están bloqueados y fueron revertidos');
+    else if (failed.length > 0) toast.error('Error al guardar algunos pronósticos');
   } catch (error) {
     if (error.message === 'No eres un participante activo en este torneo') {
-      toast.error('No eres un participante activo en este torneo', { duration: 4000 });
+      toast.error('No eres un participante activo en esta polla', { duration: 4000 });
       setTimeout(() => navigate('/dashboard'), 1500);
-    } else if (error.message?.includes('plazo para pronosticar') || error.message?.includes('bloqueado')) {
-      toast.error('Uno o más pronósticos ya están bloqueados');
-    } else if (error.message === 'Los pronósticos deben tener máximo dos dígitos') {
-      toast.error('Cada resultado debe tener máximo dos dígitos');
     } else {
       toast.error('Error al guardar pronósticos');
     }
@@ -403,97 +437,219 @@ const hasChanges = useMemo(() => {
       <Modal
         isOpen={showRulesModal}
         onClose={() => setShowRulesModal(false)}
-        title="Reglas del torneo"
+        title="Reglas de la polla"
         size="lg"
       >
         {(() => {
           const pointConfig = tournament?.pointConfig || { exact: 3, difference: 2, winner: 1 };
           const multiplier = tournament?.secondRoundMultiplier ?? 2;
           const lockMinutes = tournament?.predictionLockMinutes || 10;
-          const exactTotal = pointConfig.winner + pointConfig.difference + pointConfig.exact * 2;
-          const differenceTotal = pointConfig.winner + pointConfig.difference;
+          const exactBase = pointConfig.exact;
+          const diffBase = pointConfig.difference;
+          const winnerBase = pointConfig.winner;
+          const exactTotal = winnerBase + diffBase + exactBase * 2;
+          const diffTotal = winnerBase + diffBase;
+          const groupStageExample = matches.find((m) => m.round === 'Group Stage') || matches[0] || null;
+
           return (
-            <div className="space-y-5 text-left">
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Puntos por pronóstico (Fase de grupos)</p>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="bg-white rounded-lg border border-gray-200 p-3">
-                    <p className="text-2xl font-bold text-blue-600">{pointConfig.winner}</p>
-                    <p className="text-xs text-gray-500 mt-1">Ganador o empate</p>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 p-3">
-                    <p className="text-2xl font-bold text-blue-600">{pointConfig.difference}</p>
-                    <p className="text-xs text-gray-500 mt-1">Diferencia de goles</p>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 p-3">
-                    <p className="text-2xl font-bold text-blue-600">{pointConfig.exact}</p>
-                    <p className="text-xs text-gray-500 mt-1">Goles por equipo</p>
-                  </div>
-                </div>
+            <div className="space-y-4 text-left">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Los ejemplos están basados en la configuración actual de la polla.</p>
+              {/* Tabs */}
+              <div className="flex border-b border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setRulesTab('primera')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition ${rulesTab === 'primera' ? 'border-blue-600 text-blue-700 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  Primera ronda
+                </button>
+                {multiplier > 1 && (
+                  <button
+                    onClick={() => setRulesTab('segunda')}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition ${rulesTab === 'segunda' ? 'border-amber-600 text-amber-700 dark:text-amber-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    Segunda ronda (×{multiplier})
+                  </button>
+                )}
               </div>
 
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Ejemplos de puntuación (resultado real: 2 - 1)</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center bg-white rounded-md border border-gray-200 px-3 py-2">
-                    <span className="font-medium text-gray-700">Pronóstico 2-1 <span className="text-xs text-gray-400">(exacto)</span></span>
-                    <span className="text-blue-700 font-semibold">{exactTotal} pts</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-white rounded-md border border-gray-200 px-3 py-2">
-                    <span className="font-medium text-gray-700">Pronóstico 1-0 <span className="text-xs text-gray-400">(dif. correcta)</span></span>
-                    <span className="text-blue-700 font-semibold">{differenceTotal} pts</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-white rounded-md border border-gray-200 px-3 py-2">
-                    <span className="font-medium text-gray-700">Pronóstico 3-1 <span className="text-xs text-gray-400">(ganador + visitante exacto)</span></span>
-                    <span className="text-blue-700 font-semibold">{pointConfig.winner + pointConfig.exact} pts</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-white rounded-md border border-gray-200 px-3 py-2">
-                    <span className="font-medium text-gray-700">Pronóstico 4-2 <span className="text-xs text-gray-400">(solo ganador correcto)</span></span>
-                    <span className="text-blue-700 font-semibold">{pointConfig.winner} pts</span>
-                  </div>
-                </div>
-              </div>
-
-              {multiplier > 1 && (() => {
-                  const exactTotal = pointConfig.winner + pointConfig.difference + pointConfig.exact * 2;
-                  const differenceTotal = pointConfig.winner + pointConfig.difference;
-                  return (
-                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Segunda ronda (x{multiplier})</p>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          A partir de la Ronda de 32, 16avos, Cuartos, Semis, 3er puesto y Final, los puntos se multiplican por{' '}
-                          <span className="font-bold text-amber-700">x{multiplier}</span>.{' '}
-                          El pronóstico se evalúa sobre el resultado al final de los <span className="font-semibold">90 minutos reglamentarios</span>, sin contar tiempo extra ni penales.
-                        </p>
-                      </div>
-                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Ejemplos con resultado 2‑1 (x{multiplier}):</p>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 2-1 <span className="text-xs text-gray-400 dark:text-gray-400">(exacto)</span></span>
-                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{exactTotal} × {multiplier} = {exactTotal * multiplier} pts</span>
+              {/* Primera ronda */}
+              {rulesTab === 'primera' && (
+                <>
+                  {groupStageExample && (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Resultado real: 2-1 (local gana)</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{groupStageExample.homeTeam} vs {groupStageExample.awayTeam}</p>
+                      {[
+                        { pred: '2-1', pts: exactTotal, items: [
+                          { pts: winnerBase, label: 'Acertaste el ganador (local)', ok: true },
+                          { pts: diffBase, label: 'Acertaste la diferencia de goles (1)', ok: true },
+                          { pts: exactBase * 2, label: 'Acertaste los goles del local (2) y del visitante (1)', ok: true },
+                        ]},
+                        { pred: '1-0', pts: diffTotal, items: [
+                          { pts: winnerBase, label: 'Acertaste el ganador (local)', ok: true },
+                          { pts: diffBase, label: 'Acertaste la diferencia de goles (1)', ok: true },
+                          { pts: 0, label: 'Goles exactos no coinciden (1≠2, 0≠1)', ok: false },
+                        ]},
+                        { pred: '3-1', pts: winnerBase + exactBase, items: [
+                          { pts: winnerBase, label: 'Acertaste el ganador (local)', ok: true },
+                          { pts: 0, label: 'Diferencia de goles incorrecta (2≠1)', ok: false },
+                          { pts: exactBase, label: 'Acertaste los goles del visitante (1)', ok: true },
+                        ]},
+                        { pred: '4-2', pts: winnerBase, items: [
+                          { pts: winnerBase, label: 'Acertaste el ganador (local)', ok: true },
+                          { pts: 0, label: 'Diferencia de goles incorrecta (2≠1)', ok: false },
+                          { pts: 0, label: 'Goles exactos no coinciden', ok: false },
+                        ]},
+                      ].map(({ pred, pts, items }) => (
+                        <div key={pred} className="rounded-md bg-white dark:bg-gray-700 px-3 py-2.5 space-y-1.5 border border-gray-100 dark:border-gray-600">
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">Pronóstico {pred}</span>
+                            <span className={`font-bold text-sm ${pts > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-gray-400'}`}>{pts} pts</span>
+                          </div>
+                          <div className="space-y-0.5">
+                            {items.map((item, i) => (
+                              <div key={i} className="flex gap-2 text-xs">
+                                <span className={`font-semibold w-6 shrink-0 ${item.ok ? 'text-green-600' : 'text-gray-400'}`}>+{item.pts}</span>
+                                <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}>{item.label}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 1-0 <span className="text-xs text-gray-400 dark:text-gray-400">(dif. correcta)</span></span>
-                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{differenceTotal} × {multiplier} = {differenceTotal * multiplier} pts</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 3-1 <span className="text-xs text-gray-400 dark:text-gray-400">(ganador + visitante exacto)</span></span>
-                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{pointConfig.winner + pointConfig.exact} × {multiplier} = {(pointConfig.winner + pointConfig.exact) * multiplier} pts</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-white dark:bg-slate-700 rounded-md px-3 py-2">
-                          <span className="font-medium text-gray-700 dark:text-gray-100">Pronóstico 4-2 <span className="text-xs text-gray-400 dark:text-gray-400">(solo ganador)</span></span>
-                          <span className="text-amber-700 dark:text-amber-400 font-semibold">{pointConfig.winner} × {multiplier} = {pointConfig.winner * multiplier} pts</span>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  );
-                })()}
+                  )}
 
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Cierre de pronósticos</p>
-                <p className="text-sm text-gray-700">Los pronósticos se bloquean <span className="font-semibold">{lockMinutes} minutos</span> antes del inicio de cada partido.</p>
-              </div>
+                  {groupStageExample && (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Resultado real: 1-1 (empate)</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{groupStageExample.homeTeam} vs {groupStageExample.awayTeam}</p>
+                      {[
+                        { pred: '1-1', pts: exactTotal, items: [
+                          { pts: winnerBase, label: 'Acertaste el empate', ok: true },
+                          { pts: diffBase, label: 'Acertaste la diferencia de goles (0)', ok: true },
+                          { pts: exactBase * 2, label: 'Acertaste los goles del local (1) y del visitante (1)', ok: true },
+                        ]},
+                        { pred: '0-0', pts: diffTotal, items: [
+                          { pts: winnerBase, label: 'Acertaste el empate', ok: true },
+                          { pts: diffBase, label: 'Acertaste la diferencia de goles (0)', ok: true },
+                          { pts: 0, label: 'Goles exactos no coinciden (0≠1)', ok: false },
+                        ]},
+                        { pred: '2-1', pts: exactBase, items: [
+                          { pts: 0, label: 'No acertaste el resultado (fue empate, no hubo ganador)', ok: false },
+                          { pts: 0, label: 'Diferencia de goles incorrecta (1≠0)', ok: false },
+                          { pts: 0, label: 'Goles del local no coinciden (2≠1)', ok: false },
+                          { pts: exactBase, label: 'Acertaste los goles del visitante (1)', ok: true },
+                        ]},
+                      ].map(({ pred, pts, items }) => (
+                        <div key={pred} className="rounded-md bg-white dark:bg-gray-700 px-3 py-2.5 space-y-1.5 border border-gray-100 dark:border-gray-600">
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">Pronóstico {pred}</span>
+                            <span className={`font-bold text-sm ${pts > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-gray-400'}`}>{pts} pts</span>
+                          </div>
+                          <div className="space-y-0.5">
+                            {items.map((item, i) => (
+                              <div key={i} className="flex gap-2 text-xs">
+                                <span className={`font-semibold w-6 shrink-0 ${item.ok ? 'text-green-600' : 'text-gray-400'}`}>+{item.pts}</span>
+                                <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}>{item.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Cierre de pronósticos</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">Los pronósticos se bloquean <span className="font-semibold">{lockMinutes} minutos</span> antes del inicio de cada partido.</p>
+                  </div>
+                </>
+              )}
+
+              {/* Segunda ronda */}
+              {rulesTab === 'segunda' && multiplier > 1 && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">A partir de Octavos, Cuartos, Semis, 3er puesto y Final los puntos se multiplican por <span className="font-bold text-amber-700 dark:text-amber-400">×{multiplier}</span>. El resultado se evalúa sobre los <span className="font-semibold">90 min reglamentarios</span>, sin tiempo extra ni penales.</p>
+
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Resultado real: 2-1 (local gana)</p>
+                    {[
+                      { pred: '2-1', pts: exactTotal * multiplier, items: [
+                        { pts: winnerBase * multiplier, label: `Acertaste el ganador (local) ×${multiplier}`, ok: true },
+                        { pts: diffBase * multiplier, label: `Acertaste la diferencia de goles (1) ×${multiplier}`, ok: true },
+                        { pts: exactBase * 2 * multiplier, label: `Acertaste los goles del local (2) y del visitante (1) ×${multiplier}`, ok: true },
+                      ]},
+                      { pred: '1-0', pts: diffTotal * multiplier, items: [
+                        { pts: winnerBase * multiplier, label: `Acertaste el ganador (local) ×${multiplier}`, ok: true },
+                        { pts: diffBase * multiplier, label: `Acertaste la diferencia de goles (1) ×${multiplier}`, ok: true },
+                        { pts: 0, label: 'Goles exactos no coinciden (1≠2, 0≠1)', ok: false },
+                      ]},
+                      { pred: '3-1', pts: (winnerBase + exactBase) * multiplier, items: [
+                        { pts: winnerBase * multiplier, label: `Acertaste el ganador (local) ×${multiplier}`, ok: true },
+                        { pts: 0, label: 'Diferencia de goles incorrecta (2≠1)', ok: false },
+                        { pts: exactBase * multiplier, label: `Acertaste los goles del visitante (1) ×${multiplier}`, ok: true },
+                      ]},
+                      { pred: '4-2', pts: winnerBase * multiplier, items: [
+                        { pts: winnerBase * multiplier, label: `Acertaste el ganador (local) ×${multiplier}`, ok: true },
+                        { pts: 0, label: 'Diferencia de goles incorrecta (2≠1)', ok: false },
+                        { pts: 0, label: 'Goles exactos no coinciden', ok: false },
+                      ]},
+                    ].map(({ pred, pts, items }) => (
+                      <div key={pred} className="rounded-md bg-white dark:bg-slate-700 px-3 py-2.5 space-y-1.5 border border-amber-100 dark:border-amber-900/30">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">Pronóstico {pred}</span>
+                          <span className={`font-bold text-sm ${pts > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400'}`}>{pts} pts</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          {items.map((item, i) => (
+                            <div key={i} className="flex gap-2 text-xs">
+                              <span className={`font-semibold w-6 shrink-0 ${item.ok ? 'text-green-600' : 'text-gray-400'}`}>+{item.pts}</span>
+                              <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Resultado real: 1-1 (empate)</p>
+                    {[
+                      { pred: '1-1', pts: exactTotal * multiplier, items: [
+                        { pts: winnerBase * multiplier, label: `Acertaste el empate ×${multiplier}`, ok: true },
+                        { pts: diffBase * multiplier, label: `Acertaste la diferencia de goles (0) ×${multiplier}`, ok: true },
+                        { pts: exactBase * 2 * multiplier, label: `Acertaste los goles del local (1) y del visitante (1) ×${multiplier}`, ok: true },
+                      ]},
+                      { pred: '0-0', pts: diffTotal * multiplier, items: [
+                        { pts: winnerBase * multiplier, label: `Acertaste el empate ×${multiplier}`, ok: true },
+                        { pts: diffBase * multiplier, label: `Acertaste la diferencia de goles (0) ×${multiplier}`, ok: true },
+                        { pts: 0, label: 'Goles exactos no coinciden (0≠1)', ok: false },
+                      ]},
+                      { pred: '2-1', pts: exactBase * multiplier, items: [
+                        { pts: 0, label: 'No acertaste el resultado (fue empate)', ok: false },
+                        { pts: 0, label: 'Diferencia de goles incorrecta (1≠0)', ok: false },
+                        { pts: 0, label: 'Goles del local no coinciden (2≠1)', ok: false },
+                        { pts: exactBase * multiplier, label: `Acertaste los goles del visitante (1) ×${multiplier}`, ok: true },
+                      ]},
+                    ].map(({ pred, pts, items }) => (
+                      <div key={pred} className="rounded-md bg-white dark:bg-slate-700 px-3 py-2.5 space-y-1.5 border border-amber-100 dark:border-amber-900/30">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">Pronóstico {pred}</span>
+                          <span className={`font-bold text-sm ${pts > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400'}`}>{pts} pts</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          {items.map((item, i) => (
+                            <div key={i} className="flex gap-2 text-xs">
+                              <span className={`font-semibold w-6 shrink-0 ${item.ok ? 'text-green-600' : 'text-gray-400'}`}>+{item.pts}</span>
+                              <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}

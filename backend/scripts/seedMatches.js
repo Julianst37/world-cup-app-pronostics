@@ -1,24 +1,10 @@
-require('dotenv').config();
-const admin = require('firebase-admin');
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 const axios = require('axios');
 
-// Initialize Firebase Admin
-const serviceAccount = {
-  type: 'service_account',
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL,
-  client_id: process.env.FIREBASE_CLIENT_ID,
-  auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-  token_uri: 'https://oauth2.googleapis.com/token',
-};
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
-const db = admin.firestore();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 const API_URL = process.env.WC_API_URL || 'https://api.wc2026api.com';
 const API_TOKEN = process.env.WC_API_TOKEN || 'wc26_2mPk1ZBkoqqd5ApKg2PjzV';
@@ -339,18 +325,19 @@ async function fetchMatchesFromAPI() {
       // Convertir a hora colombiana (UTC-5)
       const colombiaDate = new Date(utcDate.getTime() - (5 * 60 * 60 * 1000));
       
-      // Convertir código ISO a código flagcdn
-      const homeTeamFlag = getCountryCode(match.home_team);
-      const awayTeamFlag = getCountryCode(match.away_team);
-
+      const homeCode = getCountryCode(match.home_team);
+      const awayCode = getCountryCode(match.away_team);
       return {
         id: match.id || `match_${index}`,
         matchId: match.id || `match_${index}`,
         homeTeam: match.home_team,
         awayTeam: match.away_team,
-        homeTeamFlag: `https://flagcdn.com/w40/${homeTeamFlag}.png`,
-        awayTeamFlag: `https://flagcdn.com/w40/${awayTeamFlag}.png`,
-        date: colombiaDate.toISOString(),
+        homeTeamCode: homeCode,
+        awayTeamCode: awayCode,
+        homeTeamFlag: `https://flagcdn.com/w40/${homeCode}.png`,
+        awayTeamFlag: `https://flagcdn.com/w40/${awayCode}.png`,
+        date: colombiaDate.toISOString().split('T')[0],
+        time: colombiaDate.toISOString().split('T')[1].substring(0, 5),
         stadium: match.stadium,
         group: match.group_name || null,
         round: match.round === 'group' ? 'Group Stage' : match.round,
@@ -371,51 +358,50 @@ async function seedMatches() {
   try {
     console.log('Starting match seeding...');
 
-    // Try to fetch from API first, fall back to generated data
     const apiData = await fetchMatchesFromAPI();
     const matches = apiData || generateFallbackMatches();
 
     console.log(`Seeding ${matches.length} matches...`);
 
-    const batch = db.batch();
-    let batchCount = 0;
     let totalSeeded = 0;
 
     for (const match of matches) {
       const matchId = String(match.matchId || match.id || `match_${totalSeeded + 1}`);
 
-       if (!matchId || matchId.trim() === '') {
-        console.warn(`Skipping match without ID:`, match);
+      if (!matchId || matchId.trim() === '') {
+        console.warn('Skipping match without ID:', match);
         continue;
       }
 
-      const docRef = db.collection('matches').doc(matchId);
-      const matchData = {
-        ...match,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      };
-
-      batch.set(docRef, matchData, { merge: true });
-      batchCount++;
+      await prisma.match.upsert({
+        where: { id: matchId },
+        update: {},
+        create: {
+          id: matchId,
+          homeTeam: match.homeTeam || match.home_team || '',
+          awayTeam: match.awayTeam || match.away_team || '',
+          date: match.date || '',
+          time: match.time || '00:00',
+          status: match.status || 'scheduled',
+          round: match.round || null,
+          group: match.group || null,
+          homeScore: match.homeScore ?? null,
+          awayScore: match.awayScore ?? null,
+          homeTeamCode: match.homeTeamCode || null,
+          awayTeamCode: match.awayTeamCode || null,
+          homeTeamFlag: match.homeTeamFlag || null,
+          awayTeamFlag: match.awayTeamFlag || null,
+        },
+      });
       totalSeeded++;
-
-      // Firestore batches can hold max 500 operations
-      if (batchCount === 490) {
-        await batch.commit();
-        console.log(`Committed batch of ${batchCount} matches...`);
-        batchCount = 0;
-      }
-    }
-
-    if (batchCount > 0) {
-      await batch.commit();
     }
 
     console.log(`Successfully seeded ${totalSeeded} matches!`);
+    await prisma.$disconnect();
     process.exit(0);
   } catch (error) {
     console.error('Error seeding matches:', error);
+    await prisma.$disconnect();
     process.exit(1);
   }
 }

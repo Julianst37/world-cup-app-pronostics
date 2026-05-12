@@ -1,7 +1,7 @@
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
 import app from '../config/firebase';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
@@ -36,16 +36,13 @@ export async function registerFCMToken(currentUser) {
 
     if (!token) return;
 
-    // Guardamos el token en una subcolección para soportar múltiples dispositivos
-    await setDoc(
-      doc(db, 'users', currentUser.uid, 'fcmTokens', token),
-      {
-        token,
-        updatedAt: serverTimestamp(),
-        userAgent: navigator.userAgent.slice(0, 200),
-      },
-      { merge: true }
-    );
+    // Guardamos el token en el backend para soportar múltiples dispositivos
+    const idToken = await currentUser.getIdToken();
+    await fetch(`${API_BASE_URL}/api/fcm/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ token }),
+    });
   } catch (err) {
     // No interrumpir la experiencia si las notificaciones fallan
     console.warn('[FCM] No se pudo registrar el token:', err.message);

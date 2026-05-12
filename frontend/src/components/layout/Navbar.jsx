@@ -52,7 +52,7 @@ export default function Navbar() {
                   to="/tournaments/create"
                   className="bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition font-medium"
                 >
-                  + Crear Torneo
+                  + Crear Polla
                 </Link>
                 {isSuperAdmin && (
                   <Link
@@ -106,10 +106,10 @@ export default function Navbar() {
                   >
                     <TeamAvatar
                       teamCode={userProfile?.favoriteTeam}
-                      name={userProfile?.displayName || currentUser.email}
+                      name={userProfile?.displayName || currentUser.displayName || currentUser.email}
                       size={36}
                     />
-                    <span className="text-sm">{userProfile?.displayName || currentUser.email}</span>
+                    <span className="text-sm">{userProfile?.displayName || currentUser.displayName || currentUser.email}</span>
                     <span>▾</span>
                   </button>
                   {menuOpen && (
@@ -178,7 +178,7 @@ export default function Navbar() {
               onClick={() => setMenuOpen(false)}
               className="block py-2 hover:text-blue-200 transition"
             >
-              + Crear Torneo
+              + Crear Polla
             </Link>
             <Link
               to="/notifications"

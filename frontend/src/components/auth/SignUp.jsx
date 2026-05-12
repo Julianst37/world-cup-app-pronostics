@@ -8,8 +8,7 @@ import {
   validatePassword,
   validateUsername,
 } from '../../utils/validators';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -111,9 +110,9 @@ export default function SignUp() {
   };
 
   const checkUsernameAvailable = async (username) => {
-    const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()));
-    const snapshot = await getDocs(q);
-    return snapshot.empty;
+    const res = await fetch(`${API_BASE_URL}/api/users/check-username?username=${encodeURIComponent(username.toLowerCase())}`);
+    const data = res.ok ? await res.json() : { available: false };
+    return data.available;
   };
 
   const handleUsernameBlur = async () => {
@@ -132,6 +131,25 @@ export default function SignUp() {
       }));
     } finally {
       setCheckingUsername(false);
+    }
+  };
+
+  const handleEmailBlur = async () => {
+    const emailError = getFieldError('email', formData.email);
+    if (emailError || !formData.email.trim()) {
+      setErrors((prev) => ({ ...prev, email: emailError }));
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/check-email?email=${encodeURIComponent(formData.email.toLowerCase())}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.available) {
+          setErrors((prev) => ({ ...prev, email: 'Este email ya está registrado' }));
+        }
+      }
+    } catch {
+      // silently ignore network errors on blur
     }
   };
 
@@ -277,6 +295,7 @@ export default function SignUp() {
               name="email"
               value={formData.email}
               onChange={handleChange}
+              onBlur={handleEmailBlur}
               maxLength={FIELD_MAX_LENGTHS.email}
               className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${
                 errors.email ? 'border-red-400 bg-red-50/40' : 'border-gray-300'
