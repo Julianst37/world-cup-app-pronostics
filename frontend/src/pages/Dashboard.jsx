@@ -49,7 +49,7 @@ export default function Dashboard() {
     }
 
     if (!/^[A-Z0-9]+$/.test(joinCode.trim())) {
-      toast.error('El código debe contener solo letras mayúsculas y números');
+      toast.error('El código debe contener solo letras mayúsculas y números.');
       return;
     }
 
