@@ -4,7 +4,7 @@
   "description": "Backend scripts for World Cup 2026 Pronostics App",
   "main": "server.js",
   "scripts": {
-    "start": "npx prisma migrate deploy && node server.js",
+    "start": "npx prisma generate && npx prisma migrate deploy && node server.js",
     "db:migrate": "npx prisma migrate deploy",
     "db:generate": "npx prisma generate",
     "db:studio": "npx prisma studio",
