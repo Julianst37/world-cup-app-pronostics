@@ -13,7 +13,8 @@ export default function MatchDetail() {
   const { matchId } = useParams();
   const [searchParams] = useSearchParams();
   const { currentUser } = useAuth();
-  const { toggleFavorite, isFavorite } = useFavorites();
+  const tournamentId = searchParams.get('tournamentId');
+  const { toggleFavorite, isFavorite } = useFavorites(currentUser?.uid, tournamentId);
   const [match, setMatch] = useState(null);
   const [predictions, setPredictions] = useState([]);
   const [participants, setParticipants] = useState([]);
@@ -21,7 +22,6 @@ export default function MatchDetail() {
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
   const navigate = useNavigate();
-  const tournamentId = searchParams.get('tournamentId');
 
   // Re-evalúa el bloqueo cada 30 segundos sin necesitar refrescar
   useEffect(() => {
@@ -46,6 +46,14 @@ const handleGoBack = () => {
 
   useEffect(() => {
     if (!currentUser) return;
+
+    // ✅ Limpiar estado anterior inmediatamente cuando cambia matchId
+    setLoading(true);
+    setMatch(null);
+    setPredictions([]);
+    setTournament(null);
+    setParticipants([]);
+
     const load = async () => {
       const idToken = await currentUser.getIdToken();
       const headers = { Authorization: `Bearer ${idToken}` };
@@ -169,7 +177,9 @@ const handleGoBack = () => {
             {homeTeam.flag && (
               <img src={homeTeam.flag} alt="" className="w-16 h-12 mx-auto mb-2 rounded object-cover" />
             )}
-            <p className="font-bold text-base sm:text-xl leading-tight break-words px-1">{homeTeam.name}</p>
+            {/* Mostrar código en móvil, nombre en desktop */}
+            <p className="font-bold text-2xl leading-tight px-1 sm:hidden">{homeTeam.code?.toUpperCase() || homeTeam.name}</p>
+            <p className="font-bold text-base sm:text-xl leading-tight px-1 hidden sm:block">{homeTeam.name}</p>
           </div>
 
           <div className="text-center px-6">
@@ -191,7 +201,9 @@ const handleGoBack = () => {
             {awayTeam.flag && (
               <img src={awayTeam.flag} alt="" className="w-16 h-12 mx-auto mb-2 rounded object-cover" />
             )}
-            <p className="font-bold text-base sm:text-xl leading-tight break-words px-1">{awayTeam.name}</p>
+            {/* Mostrar código en móvil, nombre en desktop */}
+            <p className="font-bold text-2xl leading-tight px-1 sm:hidden">{awayTeam.code?.toUpperCase() || awayTeam.name}</p>
+            <p className="font-bold text-base sm:text-xl leading-tight px-1 hidden sm:block">{awayTeam.name}</p>
           </div>
         </div>
 

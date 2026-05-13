@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { useMatches } from '../../hooks/useMatches';
 import { usePlatformSettings } from '../../hooks/usePlatformSettings';
 import { usePredictions } from '../../hooks/usePredictions';
@@ -15,10 +16,10 @@ import { PLAYOFF_ROUNDS, ROUNDS } from '../../utils/constants';
 
 const ITEMS_PER_PAGE = 10;
 
-// Leer filtros guardados desde localStorage (para inicialización lazy)
+// Leer filtros guardados desde sessionStorage (para inicialización lazy)
 const getInitialFilters = () => {
   try {
-    const saved = localStorage.getItem('predictionFilters');
+    const saved = sessionStorage.getItem('predictionFilters');
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
@@ -83,6 +84,7 @@ const ResultBadge = ({ result }) => {
 
 export default function PredictionsList() {
   const { tournament } = useOutletContext();
+  const { currentUser } = useAuth();
   // Platform settings must come before useMatches so we can pass the enabled rounds
   const { settings: platformSettings, loading: platformSettingsLoading } = usePlatformSettings();
   const enabledRounds = useMemo(() => {
@@ -92,7 +94,7 @@ export default function PredictionsList() {
   }, [platformSettings, platformSettingsLoading]);
   const { matches, loading } = useMatches({ rounds: enabledRounds });
   const { predictions, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions } = usePredictions(tournament?.id);
-  const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const { favorites, toggleFavorite, isFavorite } = useFavorites(currentUser?.uid, tournament?.id);
   const [filterRound, setFilterRound] = useState(() => getInitialFilters().round);
   const [filterGroup, setFilterGroup] = useState(() => getInitialFilters().group);
   const [filterDate, setFilterDate] = useState(() => getInitialFilters().date);
@@ -194,7 +196,7 @@ useEffect(() => {
     showFavorites: filterFavorites,
     page: currentPage,
   };
-  localStorage.setItem('predictionFilters', JSON.stringify(filters));
+  sessionStorage.setItem('predictionFilters', JSON.stringify(filters));
 }, [filterRound, filterGroup, filterDate, filterPredictionStatus, filterFavorites, currentPage]);
 
   // Paginación
@@ -207,12 +209,25 @@ useEffect(() => {
 
       // Inicializar predicciones actuales
 useEffect(() => {
+  // Obtener borradores guardados en sessionStorage (solo para la sesión actual)
+  const getDraftKey = () => `predictionDrafts_${tournament?.id}`;
+  let drafts = {};
+  try {
+    const saved = sessionStorage.getItem(getDraftKey());
+    if (saved) {
+      drafts = JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('Error loading drafts:', e);
+  }
+
   const initial = {};
   paginatedMatches.forEach((match) => {
     const matchId = String(match.id || match.matchId);
     const existing = predictionsMap.get(matchId);
     
-    initial[matchId] = {
+    // Priorizar: 1) Borrador de sesión, 2) Predicción guardada en BD, 3) Vacío
+    initial[matchId] = drafts[matchId] || {
       home: existing?.prediction?.homeScore ?? '',
       away: existing?.prediction?.awayScore ?? '',
     };
@@ -222,7 +237,26 @@ useEffect(() => {
     const newState = { ...prev, ...initial };
     return newState;
   });
-}, [paginatedMatches, predictionsMap]);
+}, [paginatedMatches, predictionsMap, tournament?.id]);
+
+  // ✅ Guardar borradores en sessionStorage cuando cambien (solo para la sesión)
+  useEffect(() => {
+    if (!tournament?.id) return;
+    try {
+      const draftKey = `predictionDrafts_${tournament.id}`;
+      // Filtrar solo los que tienen valores no guardados
+      const draftsToSave = Object.entries(currentPredictions).reduce((acc, [matchId, pred]) => {
+        // Guardar solo si hay valores
+        if (pred.home !== '' || pred.away !== '') {
+          acc[matchId] = pred;
+        }
+        return acc;
+      }, {});
+      sessionStorage.setItem(draftKey, JSON.stringify(draftsToSave));
+    } catch (e) {
+      console.error('Error saving drafts:', e);
+    }
+  }, [currentPredictions, tournament?.id]);
   // Obtener valores únicos para filtros
   const rounds = useMemo(() => {
     const allRounds = ['all', ...new Set(globallyAvailableMatches.map((match) => normalizeRoundName(match.round)).filter(Boolean))];
@@ -275,6 +309,15 @@ useEffect(() => {
         ...prev,
         [String(matchId)]: { home: '', away: '' },
       }));
+      // ✅ Limpiar borrador del sessionStorage
+      try {
+        const draftKey = `predictionDrafts_${tournament?.id}`;
+        const drafts = JSON.parse(sessionStorage.getItem(draftKey) || '{}');
+        delete drafts[String(matchId)];
+        sessionStorage.setItem(draftKey, JSON.stringify(drafts));
+      } catch (e) {
+        console.error('Error clearing draft:', e);
+      }
       toast.success('Pronóstico eliminado');
     } catch {
       toast.error('Error al limpiar el pronóstico');
@@ -303,6 +346,15 @@ useEffect(() => {
         ids.forEach((id) => { next[id] = { home: '', away: '' }; });
         return next;
       });
+      // ✅ Limpiar borradores del sessionStorage
+      try {
+        const draftKey = `predictionDrafts_${tournament?.id}`;
+        const drafts = JSON.parse(sessionStorage.getItem(draftKey) || '{}');
+        ids.forEach(id => delete drafts[id]);
+        sessionStorage.setItem(draftKey, JSON.stringify(drafts));
+      } catch (e) {
+        console.error('Error clearing drafts:', e);
+      }
       toast.success(`${ids.length} pronóstico(s) eliminado(s)`);
     } catch {
       toast.error('Error al limpiar los pronósticos');
@@ -365,7 +417,22 @@ useEffect(() => {
         failed.forEach((matchId) => {
           const existing = predictionsMap.get(String(matchId));
           next[String(matchId)] = {
-            home: existing?.prediction?.homeScore ?? '',
+            home: e{
+      toast.success(`${saved} pronóstico(s) guardado(s)`);
+      // ✅ Limpiar borradores guardados exitosamente
+      try {
+        const draftKey = `predictionDrafts_${tournament?.id}`;
+        const drafts = JSON.parse(sessionStorage.getItem(draftKey) || '{}');
+        toSave.forEach(([matchId]) => {
+          if (!failed.includes(matchId)) {
+            delete drafts[String(matchId)];
+          }
+        });
+        sessionStorage.setItem(draftKey, JSON.stringify(drafts));
+      } catch (e) {
+        console.error('Error clearing drafts:', e);
+      }
+    }
             away: existing?.prediction?.awayScore ?? '',
           };
         });
