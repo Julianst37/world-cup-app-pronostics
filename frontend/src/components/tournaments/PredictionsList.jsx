@@ -417,7 +417,16 @@ useEffect(() => {
         failed.forEach((matchId) => {
           const existing = predictionsMap.get(String(matchId));
           next[String(matchId)] = {
-            home: e{
+            home: existing?.prediction?.homeScore ?? '',
+            away: existing?.prediction?.awayScore ?? '',
+          };
+        });
+        return next;
+      });
+    }
+
+    const saved = toSave.length - failed.length;
+    if (saved > 0) {
       toast.success(`${saved} pronóstico(s) guardado(s)`);
       // ✅ Limpiar borradores guardados exitosamente
       try {
@@ -433,15 +442,6 @@ useEffect(() => {
         console.error('Error clearing drafts:', e);
       }
     }
-            away: existing?.prediction?.awayScore ?? '',
-          };
-        });
-        return next;
-      });
-    }
-
-    const saved = toSave.length - failed.length;
-    if (saved > 0) toast.success(`${saved} pronóstico(s) guardado(s)`);
     if (hasLockError) toast.error('Uno o más pronósticos ya están bloqueados y fueron revertidos');
     else if (failed.length > 0) toast.error('Error al guardar algunos pronósticos');
   } catch (error) {
