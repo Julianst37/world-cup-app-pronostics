@@ -24,14 +24,36 @@ function swEnvPlugin() {
     },
     // En build: genera el SW con los valores ya reemplazados
     closeBundle() {
-      const env = loadEnv('production', process.cwd(), '');
-      const src = path.resolve(__dirname, 'public/firebase-messaging-sw.js');
-      const dest = path.resolve(__dirname, 'dist/firebase-messaging-sw.js');
-      let content = fs.readFileSync(src, 'utf-8');
-      Object.keys(env).forEach((key) => {
-        content = content.replaceAll(`__${key}__`, env[key]);
-      });
-      fs.writeFileSync(dest, content);
+      try {
+        const env = loadEnv('production', process.cwd(), '');
+        const distDir = path.resolve(__dirname, 'dist');
+        
+        // ✅ Crear la carpeta dist si no existe
+        if (!fs.existsSync(distDir)) {
+          fs.mkdirSync(distDir, { recursive: true });
+        }
+        
+        // ✅ Copiar y reemplazar firebase-messaging-sw.js
+        const swSrc = path.resolve(__dirname, 'public/firebase-messaging-sw.js');
+        const swDest = path.resolve(distDir, 'firebase-messaging-sw.js');
+        if (fs.existsSync(swSrc)) {
+          let content = fs.readFileSync(swSrc, 'utf-8');
+          Object.keys(env).forEach((key) => {
+            content = content.replaceAll(`__${key}__`, env[key]);
+          });
+          fs.writeFileSync(swDest, content);
+        }
+        
+        // ✅ Copiar manifest.json
+        const manifestSrc = path.resolve(__dirname, 'public/manifest.json');
+        const manifestDest = path.resolve(distDir, 'manifest.json');
+        if (fs.existsSync(manifestSrc)) {
+          fs.copyFileSync(manifestSrc, manifestDest);
+        }
+        
+      } catch (error) {
+        console.warn('[sw-env-replace] Warning:', error.message);
+      }
     },
   };
 }
