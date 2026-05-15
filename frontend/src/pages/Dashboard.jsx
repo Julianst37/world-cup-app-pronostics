@@ -187,7 +187,7 @@ export default function Dashboard() {
                     return;
                   }
                   if (tournament.participantStatus === 'pending') {
-                    toast('Tu solicitud está pendiente de aprobación', { icon: '⏳' });
+                    toast('Tu solicitud está pendiente de aprobación', { icon: '⏳', id: 'pending-approval' });
                     return;
                   }
                   navigate(`/tournaments/${tournament.id}/home`);

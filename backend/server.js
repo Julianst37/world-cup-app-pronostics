@@ -596,23 +596,6 @@ app.get('/api/users/check-username', async (req, res) => {
   }
 });
 
-app.get('/api/users/check-email', async (req, res) => {
-  const email = String(req.query.email || '').trim().toLowerCase();
-  if (!email) {
-    res.status(400).json({ message: 'email requerido' });
-    return;
-  }
-  try {
-    const existing = await prisma.user.findFirst({
-      where: { email },
-      select: { id: true },
-    });
-    res.json({ available: !existing });
-  } catch (error) {
-    res.status(500).json({ message: 'Error al verificar email' });
-  }
-});
-
 app.get('/api/users/:id', requireAuth, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
@@ -697,26 +680,19 @@ app.get('/api/tournaments', requireAuth, async (req, res) => {
 app.get('/api/tournaments/:id', requireAuth, async (req, res) => {
   try {
     const uid = req.decodedToken.uid;
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: req.params.id },
-      include: {
-        participants: {
-          where: { userId: uid },
-          select: { status: true, role: true },
-        },
-      },
-    });
+    const tournament = await prisma.tournament.findUnique({ where: { id: req.params.id } });
     if (!tournament) {
       res.status(404).json({ message: 'Torneo no encontrado' });
       return;
     }
-    const myParticipant = tournament.participants[0] || null;
-    res.json({
-      ...tournament,
-      participants: undefined,
-      participantStatus: myParticipant?.status ?? null,
-      participantRole: myParticipant?.role ?? null,
+    const participant = await prisma.participant.findUnique({
+      where: { userId_tournamentId: { userId: uid, tournamentId: tournament.id } },
     });
+    if (!participant) {
+      res.status(403).json({ message: 'No eres miembro de esta polla', code: 'NOT_A_MEMBER' });
+      return;
+    }
+    res.json({ ...tournament, participantStatus: participant.status, participantRole: participant.role });
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener el torneo' });
   }
@@ -794,13 +770,13 @@ app.put('/api/tournaments/:id', requireAuth, async (req, res) => {
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
-        ...(predictionLockMinutes !== undefined && { predictionLockMinutes: parseInt(predictionLockMinutes, 10) || 10 }),
-        ...(secondRoundMultiplier !== undefined && { secondRoundMultiplier: parseFloat(secondRoundMultiplier) || 2 }),
+        ...(predictionLockMinutes !== undefined && { predictionLockMinutes }),
+        ...(secondRoundMultiplier !== undefined && { secondRoundMultiplier }),
         ...(pointConfig !== undefined && { pointConfig }),
         ...(requiresApproval !== undefined && { requiresApproval }),
         ...(showPredictionsAlways !== undefined && { showPredictionsAlways }),
         ...(prizeConfig !== undefined && { prizeConfig }),
-        ...(maxUsers !== undefined && { maxUsers: maxUsers === null ? null : parseInt(maxUsers, 10) }),
+        ...(maxUsers !== undefined && { maxUsers }),
         ...(isPublic !== undefined && { isPublic }),
         ...(status !== undefined && { status }),
       },
@@ -808,7 +784,7 @@ app.put('/api/tournaments/:id', requireAuth, async (req, res) => {
     console.log('[PUT tournament] prizeConfig saved:', JSON.stringify(updated.prizeConfig));
     res.json(updated);
   } catch (error) {
-    console.error('[PUT tournament] Prisma error:', error.message, error.code);
+    console.error('[PUT tournament] error:', error);
     res.status(500).json({ message: 'Error al actualizar el torneo' });
   }
 });
@@ -1716,7 +1692,12 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
   const uid = req.decodedToken.uid;
   try {
     const notifications = await prisma.notification.findMany({
-      where: { OR: [{ userId: uid }, { adminId: uid }] },
+      where: {
+        OR: [
+          { userId: uid, type: { in: ['approved', 'rejected'] } },
+          { adminId: uid, type: 'pending_approval' },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         user: { select: { displayName: true } },

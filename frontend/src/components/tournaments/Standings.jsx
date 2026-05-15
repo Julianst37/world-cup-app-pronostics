@@ -3,8 +3,9 @@ import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Loading from '../common/Loading';
 import TeamAvatar from '../common/TeamAvatar';
-import { Trophy, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { Trophy, ArrowUp, ArrowDown, Minus, Share2 } from 'lucide-react';
 import { loadParticipants, fetchUserProfile, loadStandingsDoc, invalidateParticipantsCache } from '../../hooks/participantsCache';
+import html2canvas from 'html2canvas';
 
 const getPreviousStandingsKey = (tournamentId) => `standings_${tournamentId}`;
 
@@ -78,7 +79,9 @@ export default function Standings() {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sharing, setSharing] = useState(false);
   const previousStandings = useRef(null);
+  const tableRef = useRef(null);
 
   useEffect(() => {
     if (!tournament?.id) return;
@@ -102,11 +105,11 @@ export default function Standings() {
       try {
         const idToken = await currentUser?.getIdToken();
 
-        const hydrateStandings = async (participants) => {
+        const hydrateStandings = async (participants, hasFinishedMatches = true) => {
           const standingsWithMovement = await buildStandingsEntries(participants, previousStandings, idToken);
           if (!isMounted) return;
           setStandings(standingsWithMovement);
-          persistStandingsSnapshot(tournament.id, standingsWithMovement);
+          if (hasFinishedMatches) persistStandingsSnapshot(tournament.id, standingsWithMovement);
           setLoading(false);
         };
 
@@ -127,8 +130,9 @@ export default function Standings() {
           const newParticipants = active.filter((p) => !inStandings.has(p.userId));
           await hydrateStandings([...standingsData, ...newParticipants]);
         } else {
-          // No finalized matches yet — show all active participants with 0 points
-          await hydrateStandings(active);
+          // No finalized matches yet — show all active participants with 0 points, no movement
+          previousStandings.current = null;
+          await hydrateStandings(active, false);
         }
       } catch (err) {
         console.error('Standings error:', err);
@@ -141,6 +145,39 @@ export default function Standings() {
     return () => { isMounted = false; };
   }, [tournament?.id]);
 
+  const handleShare = async () => {
+    if (!tableRef.current) return;
+    setSharing(true);
+    try {
+      const canvas = await html2canvas(tableRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      canvas.toBlob(async (blob) => {
+        if (!blob) { setSharing(false); return; }
+        const file = new File([blob], 'posiciones.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Tabla de posiciones — ${tournament?.name}`,
+          });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'posiciones.png';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+        setSharing(false);
+      }, 'image/png');
+    } catch {
+      setSharing(false);
+    }
+  };
+
   if (loading) return <Loading />;
   if (error) return <div className="text-center py-10 text-red-500">Error al cargar posiciones: {error}</div>;
 
@@ -150,7 +187,17 @@ export default function Standings() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-4">Tabla de Posiciones</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">Tabla de Posiciones</h2>
+        <button
+          onClick={handleShare}
+          disabled={sharing || standings.length === 0}
+          className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 border border-gray-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Share2 className="w-4 h-4" />
+          {sharing ? 'Generando...' : 'Compartir'}
+        </button>
+      </div>
 
       {prizeConfig && (
         <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700 px-4 py-3 flex items-start gap-3">
@@ -160,7 +207,7 @@ export default function Standings() {
               Premio total: {fmtCOP(prizeConfig.totalAmount)}
             </p>
             <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-2">
-              Distribuido entre los {prizeConfig.winnersCount} primero{prizeConfig.winnersCount !== 1 ? 's' : ''}
+              {prizeConfig.winnersCount === 1 ? '1er puesto' : `Distribuido entre los ${prizeConfig.winnersCount} primeros`}
             </p>
             <div className="flex flex-wrap gap-2">
               {(prizeConfig.distribution || []).map((item, i) => {
@@ -176,13 +223,13 @@ export default function Standings() {
               })}
             </div>
             {!isFinished && (
-              <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-2 italic">Los montos exactos se revelarán cuando la polla finalice.</p>
+              <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-2 italic">Los ganadores del premio se revelarán cuando la polla finalice.</p>
             )}
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div ref={tableRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
           <span className="col-span-1 text-center">#</span>
           <span className={showPrizeColumn ? 'col-span-5' : 'col-span-7'}>Participante</span>

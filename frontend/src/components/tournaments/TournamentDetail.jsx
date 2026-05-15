@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, NavLink, Outlet, Navigate, Link } from 'react-router-dom';
+import { useParams, NavLink, Outlet, Link } from 'react-router-dom';
 import { useTournaments } from '../../hooks/useTournaments';
 import { useAuth } from '../../contexts/AuthContext';
 import Loading from '../common/Loading';
 import Error from '../common/Error';
-import { Home, ClipboardList, Trophy, Users, Settings, Lock } from 'lucide-react';
+import { Home, ClipboardList, Trophy, Users, Settings, Lock, ShieldOff } from 'lucide-react';
 
 export default function TournamentDetail() {
   const { tournamentId } = useParams();
@@ -13,6 +13,7 @@ export default function TournamentDetail() {
   const [tournament, setTournament] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [notMember, setNotMember] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -21,7 +22,11 @@ export default function TournamentDetail() {
         if (!data) throw new Error('Polla no encontrada');
         setTournament(data);
       } catch (err) {
-        setError(err.message);
+        if (err.code === 'NOT_A_MEMBER') {
+          setNotMember(true);
+        } else {
+          setError(err.message);
+        }
       } finally {
         setLoading(false);
       }
@@ -31,6 +36,28 @@ export default function TournamentDetail() {
 
   if (loading) return <Loading />;
   if (error) return <Error message={error} />;
+
+  if (notMember) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center px-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-10 shadow-sm">
+          <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShieldOff className="w-7 h-7 text-gray-400" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">No eres miembro de esta polla</h2>
+          <p className="text-gray-500 text-sm mb-6">
+            No tienes acceso a esta polla. Para unirte, necesitas un código de invitación.
+          </p>
+          <Link
+            to="/dashboard"
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition text-sm"
+          >
+            Volver al Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (tournament?.status === 'inactive') {
     return (
