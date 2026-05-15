@@ -155,25 +155,30 @@ export default function Standings() {
         useCORS: true,
         logging: false,
       });
-      canvas.toBlob(async (blob) => {
-        if (!blob) { setSharing(false); return; }
-        const file = new File([blob], 'posiciones.png', { type: 'image/png' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('No se pudo generar la imagen');
+      const file = new File([blob], 'posiciones.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
           await navigator.share({
             files: [file],
             title: `Tabla de posiciones — ${tournament?.name}`,
           });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'posiciones.png';
-          a.click();
-          URL.revokeObjectURL(url);
+        } catch (err) {
+          // El usuario canceló el diálogo — no es un error
+          if (err?.name !== 'AbortError') throw err;
         }
-        setSharing(false);
-      }, 'image/png');
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'posiciones.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch {
+      // error silencioso
+    } finally {
       setSharing(false);
     }
   };
