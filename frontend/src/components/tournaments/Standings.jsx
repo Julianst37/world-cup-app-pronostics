@@ -3,9 +3,8 @@ import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Loading from '../common/Loading';
 import TeamAvatar from '../common/TeamAvatar';
-import { Trophy, ArrowUp, ArrowDown, Minus, Share2 } from 'lucide-react';
+import { Trophy, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { loadParticipants, fetchUserProfile, loadStandingsDoc, invalidateParticipantsCache } from '../../hooks/participantsCache';
-import html2canvas from 'html2canvas';
 
 const getPreviousStandingsKey = (tournamentId) => `standings_${tournamentId}`;
 
@@ -79,9 +78,7 @@ export default function Standings() {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sharing, setSharing] = useState(false);
   const previousStandings = useRef(null);
-  const tableRef = useRef(null);
 
   useEffect(() => {
     if (!tournament?.id) return;
@@ -145,44 +142,6 @@ export default function Standings() {
     return () => { isMounted = false; };
   }, [tournament?.id]);
 
-  const handleShare = async () => {
-    if (!tableRef.current) return;
-    setSharing(true);
-    try {
-      const canvas = await html2canvas(tableRef.current, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      });
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) throw new Error('No se pudo generar la imagen');
-      const file = new File([blob], 'posiciones.png', { type: 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: `Tabla de posiciones — ${tournament?.name}`,
-          });
-        } catch (err) {
-          // El usuario canceló el diálogo — no es un error
-          if (err?.name !== 'AbortError') throw err;
-        }
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'posiciones.png';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch {
-      // error silencioso
-    } finally {
-      setSharing(false);
-    }
-  };
-
   if (loading) return <Loading />;
   if (error) return <div className="text-center py-10 text-red-500">Error al cargar posiciones: {error}</div>;
 
@@ -192,17 +151,7 @@ export default function Standings() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">Tabla de Posiciones</h2>
-        <button
-          onClick={handleShare}
-          disabled={sharing || standings.length === 0}
-          className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 border border-gray-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Share2 className="w-4 h-4" />
-          {sharing ? 'Generando...' : 'Compartir'}
-        </button>
-      </div>
+      <h2 className="text-xl font-bold text-gray-800 mb-4">Tabla de Posiciones</h2>
 
       {prizeConfig && (
         <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700 px-4 py-3 flex items-start gap-3">
@@ -234,7 +183,7 @@ export default function Standings() {
         </div>
       )}
 
-      <div ref={tableRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
           <span className="col-span-1 text-center">#</span>
           <span className={showPrizeColumn ? 'col-span-5' : 'col-span-7'}>Participante</span>
