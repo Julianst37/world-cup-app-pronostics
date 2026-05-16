@@ -93,7 +93,7 @@ export default function PredictionsList() {
     return [ROUNDS.GROUP_STAGE, ...PLAYOFF_ROUNDS.filter((r) => playoffRounds[r] === true)];
   }, [platformSettings, platformSettingsLoading]);
   const { matches, loading } = useMatches({ rounds: enabledRounds });
-  const { predictions, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions } = usePredictions(tournament?.id);
+  const { predictions, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions, refreshPredictions } = usePredictions(tournament?.id);
   const { favorites, toggleFavorite, isFavorite } = useFavorites(currentUser?.uid, tournament?.id);
   const [filterRound, setFilterRound] = useState(() => getInitialFilters().round);
   const [filterGroup, setFilterGroup] = useState(() => getInitialFilters().group);
@@ -105,6 +105,7 @@ export default function PredictionsList() {
   const [savingAll, setSavingAll] = useState(false);
   const [clearingId, setClearingId] = useState(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [, setTick] = useState(0);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rulesTab, setRulesTab] = useState('primera');
@@ -480,6 +481,19 @@ const hasChanges = useMemo(() => {
           <span className="text-sm text-gray-500 shrink-0">{predictions.length} guardados</span>
         </div>
         <div className="flex items-center justify-between sm:justify-end sm:gap-2 shrink-0">
+          <button
+            onClick={async () => {
+              setRefreshing(true);
+              try { await refreshPredictions(); } finally { setRefreshing(false); }
+            }}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-600 border border-green-200 rounded-lg hover:bg-green-50 transition disabled:opacity-50 whitespace-nowrap"
+            title="Refrescar pronósticos desde el servidor"
+          >
+            <RotateCcw className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">{refreshing ? 'Refrescando...' : 'Refrescar'}</span>
+            <span className="sm:hidden">{refreshing ? '...' : 'Ref'}</span>
+          </button>
           <button
             onClick={handleClearAll}
             disabled={clearingAll}

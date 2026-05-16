@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-const PREDICTIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const PREDICTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 // Module-level cache — survives navigation within same session
 const predictionsMemCache = new Map(); // key → { data, ts }
@@ -178,7 +178,20 @@ export function usePredictions(tournamentId) {
     [currentUser, tournamentId, clearPrediction]
   );
 
-  return { predictions, loading, error, savePrediction, isPredictionLocked, getPredictionForMatch, clearPrediction, clearAllPredictions };
+  const refreshPredictions = useCallback(async () => {
+    if (!currentUser || !tournamentId) return;
+    const key = getCacheKey(currentUser.uid, tournamentId);
+    predictionsMemCache.delete(key);
+    try { localStorage.removeItem(key); } catch (_) {}
+    const idToken = await currentUser.getIdToken();
+    const data = await fetch(`${API_BASE_URL}/api/predictions?tournamentId=${tournamentId}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    }).then((r) => r.json());
+    setPredictions(data);
+    writePredictionsCache(key, data);
+  }, [currentUser, tournamentId]);
+
+  return { predictions, loading, error, savePrediction, isPredictionLocked, getPredictionForMatch, clearPrediction, clearAllPredictions, refreshPredictions };
 }
 
 export default usePredictions;

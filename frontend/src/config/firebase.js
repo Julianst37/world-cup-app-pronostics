@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
 import { getMessaging, isSupported } from 'firebase/messaging';
@@ -17,6 +17,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+// Forzar localStorage para que el estado OAuth sobreviva redirects en móvil
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 export const storage = getStorage(app);
 
 let analytics = null;

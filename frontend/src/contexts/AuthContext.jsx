@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  getRedirectResult,
   updateProfile,
   updateEmail,
   EmailAuthProvider,
@@ -342,6 +343,21 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // Manejar resultado de redirect OAuth (en móviles donde popup se convierte en redirect)
+    getRedirectResult(auth).then(async (result) => {
+      if (!result?.user) return;
+      const idToken = await result.user.getIdToken();
+      const profile = await fetch(`${API_BASE_URL}/api/users/${result.user.uid}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      }).then((r) => r.ok ? r.json() : null).catch(() => null);
+      if (profile && profile.isActive === false) {
+        await signOut(auth);
+        toast.error('Tu cuenta está inactiva. Contacta al administrador.');
+        return;
+      }
+      await ensureUserProfile(result.user);
+    }).catch(() => {});
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
