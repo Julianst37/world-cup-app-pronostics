@@ -8,7 +8,7 @@ import { Trophy, BarChart3, Users, Link2, Copy, Check, Share2 } from 'lucide-rea
 import { FaFutbol } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { PLAYOFF_ROUNDS, ROUNDS } from '../../utils/constants';
-import { loadParticipants, loadStandingsDoc, invalidateParticipantsCache } from '../../hooks/participantsCache';
+import { loadParticipants, invalidateParticipantsCache } from '../../hooks/participantsCache';
 
 export default function TournamentHome() {
   const { tournament } = useOutletContext();
@@ -67,24 +67,11 @@ export default function TournamentHome() {
       // Always invalidate to get fresh participant list (handles new approvals)
       invalidateParticipantsCache(tournament.id);
 
-      loadStandingsDoc(tournament.id, idToken)
-        .then((standingsData) => {
-          if (standingsData !== null && standingsData.length > 0) {
-            // Check if current user is in the standings doc
-            const inDoc = standingsData.some((e) => e.userId === currentUser?.uid);
-            if (inDoc) {
-              computeRank(standingsData);
-              return;
-            }
-            // User not in standings doc (newly approved) — fall through to load fresh participants
-          }
-          // Fallback: load fresh participants directly
-          return loadParticipants(tournament.id, idToken).then((all) => {
-            const active = all.filter((p) => p.status === 'active');
-            computeRank(active.length > 0 ? active : all);
-          });
-        })
-        .catch(() => setParticipantsLoading(false));
+      // Load fresh participants directly to ensure accurate count of active participants
+      loadParticipants(tournament.id, idToken).then((all) => {
+        const active = all.filter((p) => p.status === 'active');
+        computeRank(active.length > 0 ? active : all);
+      }).catch(() => setParticipantsLoading(false));
     }).catch(() => setParticipantsLoading(false));
   }, [tournament?.id, currentUser?.uid]);
 
