@@ -8,7 +8,7 @@ import { Trophy, BarChart3, Users, Link2, Copy, Check, Share2 } from 'lucide-rea
 import { FaFutbol } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { PLAYOFF_ROUNDS, ROUNDS } from '../../utils/constants';
-import { loadParticipants, invalidateParticipantsCache } from '../../hooks/participantsCache';
+import { loadParticipantsFresh, invalidateParticipantsCache } from '../../hooks/participantsCache';
 
 export default function TournamentHome() {
   const { tournament } = useOutletContext();
@@ -20,7 +20,7 @@ export default function TournamentHome() {
     return [ROUNDS.GROUP_STAGE, ...PLAYOFF_ROUNDS.filter((r) => playoffRounds[r] === true)];
   }, [platformSettings, platformSettingsLoading]);
   const { matches, loading: matchesLoading } = useMatches({ rounds: enabledRounds });
-  const { predictions, loading: predictionsLoading } = usePredictions(tournament?.id);
+  const { predictions, loading: predictionsLoading, refreshPredictions } = usePredictions(tournament?.id);
   const [activeParticipants, setActiveParticipants] = useState(null);
   const [userRank, setUserRank] = useState(null);
   const [participantsLoading, setParticipantsLoading] = useState(true);
@@ -68,7 +68,7 @@ export default function TournamentHome() {
       invalidateParticipantsCache(tournament.id);
 
       // Load fresh participants directly to ensure accurate count of active participants
-      loadParticipants(tournament.id, idToken).then((all) => {
+      loadParticipantsFresh(tournament.id, idToken).then((all) => {
         const active = all.filter((p) => p.status === 'active');
         computeRank(active.length > 0 ? active : all);
       }).catch(() => setParticipantsLoading(false));
@@ -76,6 +76,31 @@ export default function TournamentHome() {
   }, [tournament?.id, currentUser?.uid]);
 
   const completedMatches = matches.filter((m) => m.status === 'finished').length;
+
+  // Recompute ranking when matches change (i.e., after a match is finished and points are recalculated)
+  useEffect(() => {
+    if (!tournament?.id || !currentUser?.uid) return;
+
+    setParticipantsLoading(true);
+
+    const computeRank = (parts) => {
+      setActiveParticipants(parts.length);
+      const sorted = [...parts].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+      const idx = sorted.findIndex((p) => p.userId === currentUser?.uid);
+      setUserRank(idx >= 0 ? idx + 1 : null);
+      setParticipantsLoading(false);
+    };
+
+    currentUser.getIdToken().then((idToken) => {
+      loadParticipantsFresh(tournament.id, idToken).then((all) => {
+        const active = all.filter((p) => p.status === 'active');
+        computeRank(active.length > 0 ? active : all);
+      }).catch(() => setParticipantsLoading(false));
+    }).catch(() => setParticipantsLoading(false));
+
+    // Also refresh predictions to get updated points
+    refreshPredictions();
+  }, [tournament?.id, currentUser?.uid, completedMatches, refreshPredictions]);
   const totalPoints = predictions.reduce((sum, p) => sum + (p.points || 0), 0);
 
   const stats = [

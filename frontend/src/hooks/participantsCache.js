@@ -141,6 +141,39 @@ export async function loadParticipants(tournamentId, idToken) {
   return normalized;
 }
 
+// ─── Fresh Participants (no cache) ─────────────────────────────────────────────
+
+export async function loadParticipantsFresh(tournamentId, idToken) {
+  // Always fetch fresh from API — no cache
+  // Used for critical UIs like ranking display that need real-time updates
+  if (!idToken) return [];
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/tournaments/${tournamentId}/participants`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    // Normalize to same shape as before: flat participant with user fields merged
+    const normalized = data.map((p) => ({
+      id: p.id,
+      userId: p.userId,
+      tournamentId: p.tournamentId,
+      status: p.status,
+      role: p.role,
+      points: p.points,
+      joinedAt: p.joinedAt,
+      displayName: p.user?.displayName || '',
+      username: p.user?.username || '',
+      photoURL: p.user?.photoURL || null,
+      favoriteTeam: p.user?.favoriteTeam || null,
+      email: p.user?.email || '',
+    }));
+    return normalized;
+  } catch (_) {
+    return [];
+  }
+}
+
 // ─── Standings Doc ─────────────────────────────────────────────────────────────
 
 // writeStandingsDoc kept for API compatibility (called after recalculate)
