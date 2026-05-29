@@ -159,6 +159,11 @@ const DISPOSABLE_EMAIL_DOMAINS = new Set([
 
 // Middleware: verifica Bearer token y adjunta uid al request
 async function requireAuth(req, res, next) {
+  // Allow OPTIONS requests without authentication (CORS preflight)
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  
   const authHeader = String(req.headers.authorization || '');
   const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   if (!idToken) {
@@ -718,6 +723,17 @@ app.post('/api/tournaments', requireAuth, async (req, res) => {
     } while (tries < 10 && await prisma.tournament.findUnique({ where: { inviteCode } }));
 
     const tournament = await prisma.$transaction(async (tx) => {
+      // Ensure user exists in the database
+      await tx.user.upsert({
+        where: { id: uid },
+        update: {},
+        create: {
+          id: uid,
+          email: req.decodedToken.email || null,
+          displayName: req.decodedToken.name || null,
+        },
+      });
+
       const t = await tx.tournament.create({
         data: {
           name,

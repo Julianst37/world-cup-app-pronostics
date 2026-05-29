@@ -110,13 +110,13 @@ export function getMatchFromCache(matchId) {
 export function useMatches(filters = {}) {
   const { currentUser } = useAuth();
   // filters.rounds = string[] → fetch only those rounds
-  // filters.rounds = null    → settings not yet ready, defer fetch
+  // filters.rounds = null    → settings not yet ready, fetch all (treat as undefined)
   // filters.rounds = undefined (default) → no round filter, fetch all
-  const roundsKey = Array.isArray(filters.rounds) ? filters.rounds.slice().sort().join(',') : (filters.rounds === null ? '__pending__' : '');
+  const roundsKey = Array.isArray(filters.rounds) ? filters.rounds.slice().sort().join(',') : '';
   const cacheKey = `${MATCHES_CACHE_KEY}_${roundsKey}_${filters.round || ''}_${filters.group || ''}_${filters.status || ''}`;
   const cached = readMatchesCache(cacheKey);
   const [matches, setMatches] = useState(() => cached?.data || []);
-  const [loading, setLoading] = useState(() => filters.rounds === null ? true : !cached?.data);
+  const [loading, setLoading] = useState(() => !cached?.data);
   const [error, setError] = useState(null);
   const [tick, setTick] = useState(0);
 
@@ -126,7 +126,8 @@ export function useMatches(filters = {}) {
   }, []);
 
   useEffect(() => {
-    if (filters.rounds === null) return;
+    // If rounds is null (settings loading), treat as undefined (fetch all)
+    // This prevents indefinite waiting for platform settings
     if (!currentUser) return;
 
     let cancelled = false;
@@ -135,7 +136,7 @@ export function useMatches(filters = {}) {
       const idToken = await currentUser.getIdToken();
       const cached = readMatchesCache(cacheKey);
 
-      if (cached?.data) {
+      if (cached?.data && cached.data.length > 0) {
         if (knownServerVersion !== null && knownServerVersion === cached.version) {
           setMatches(cached.data);
           setLoading(false);
@@ -189,6 +190,7 @@ export function useMatches(filters = {}) {
         clearAllParticipantsLocalStorage();
         setLoading(false);
       } catch (err) {
+        console.error('Error loading matches:', err);
         if (!cancelled) {
           setError(err.message);
           setLoading(false);

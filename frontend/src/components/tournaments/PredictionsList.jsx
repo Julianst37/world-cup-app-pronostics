@@ -88,10 +88,10 @@ export default function PredictionsList() {
   // Platform settings must come before useMatches so we can pass the enabled rounds
   const { settings: platformSettings, loading: platformSettingsLoading } = usePlatformSettings();
   const enabledRounds = useMemo(() => {
-    if (platformSettingsLoading) return null; // defer until settings are known
+    // Always return an array - use defaults while settings load
     const { playoffRounds = {} } = platformSettings;
     return [ROUNDS.GROUP_STAGE, ...PLAYOFF_ROUNDS.filter((r) => playoffRounds[r] === true)];
-  }, [platformSettings, platformSettingsLoading]);
+  }, [platformSettings]);
   const { matches, loading } = useMatches({ rounds: enabledRounds });
   const { predictions, savePrediction, getPredictionForMatch, clearPrediction, clearAllPredictions, refreshPredictions } = usePredictions(tournament?.id);
   const { favorites, toggleFavorite, isFavorite } = useFavorites(currentUser?.uid, tournament?.id);
