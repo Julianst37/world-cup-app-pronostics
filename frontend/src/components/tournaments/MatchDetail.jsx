@@ -118,6 +118,7 @@ const handleGoBack = () => {
     load();
   }, [matchId, tournamentId, currentUser]);
 
+
   if (loading) return <Loading />;
   if (!match) return <div className="text-center py-10 text-gray-500">Partido no encontrado</div>;
 

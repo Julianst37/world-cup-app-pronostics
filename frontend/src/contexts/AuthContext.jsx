@@ -19,7 +19,7 @@ import { clearAllParticipantsLocalStorage } from '../hooks/participantsCache';
 
 const AuthContext = createContext(null);
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+const INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;  // 1 día
 const LAST_ACTIVITY_KEY = 'wc-last-activity-at';
 const googleProvider = new GoogleAuthProvider();
 
@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
       await signOut(auth);
       localStorage.removeItem(LAST_ACTIVITY_KEY);
       setUserProfile(null);
-      toast.error('Tu sesión se cerró por 30 minutos de inactividad');
+      toast.error('Tu sesión se cerró por 1 día de inactividad');
     } finally {
       autoLogoutInProgressRef.current = false;
     }

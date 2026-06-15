@@ -67,6 +67,19 @@ app.use(
 );
 app.use(express.json());
 
+// ✅ Prevent API response caching (don't cache dynamic data)
+app.use((req, res, next) => {
+  // Only apply to API routes, not static files
+  if (req.path.startsWith('/api')) {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    });
+  }
+  next();
+});
+
 // ─── Health ────────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => {
