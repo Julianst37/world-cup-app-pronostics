@@ -1253,6 +1253,91 @@ app.put('/api/matches/:id', requireAuth, async (req, res) => {
         ...(configured !== undefined && { configured }),
       },
     });
+    
+    // ✅ Auto-recalculate points if match is being finalized
+    if (status === 'finished' && homeScore !== undefined && awayScore !== undefined) {
+      try {
+        // Get all tournaments with predictions for this match
+        const impactedPredictions = await prisma.prediction.findMany({
+          where: { matchId: req.params.id },
+          select: { tournamentId: true },
+        });
+        
+        if (impactedPredictions.length > 0) {
+          const tournamentIds = [...new Set(impactedPredictions.map((p) => p.tournamentId).filter(Boolean))];
+
+          for (const tournamentId of tournamentIds) {
+            const [tournament, tournamentPredictions, participants] = await Promise.all([
+              prisma.tournament.findUnique({ where: { id: tournamentId } }),
+              prisma.prediction.findMany({ where: { tournamentId } }),
+              prisma.participant.findMany({ where: { tournamentId } }),
+            ]);
+            
+            if (!tournament) continue;
+
+            const matchIds = [...new Set(tournamentPredictions.map((p) => p.matchId).filter(Boolean))];
+            const matchObjects = await prisma.match.findMany({ where: { id: { in: matchIds } } });
+            const matchMap = new Map(matchObjects.map((m) => [m.id, m]));
+            const pointConfig = tournament.pointConfig || { exact: 3, difference: 2, winner: 1 };
+            const secondRoundMultiplier = tournament.secondRoundMultiplier ?? 2;
+
+            const predictionUpdates = [];
+
+            // Only update predictions for the specific match being finalized
+            for (const prediction of tournamentPredictions) {
+              if (prediction.matchId !== req.params.id) continue; // Only this match
+              const predMatch = matchMap.get(prediction.matchId);
+              if (!predMatch || predMatch.homeScore === null || predMatch.awayScore === null) continue;
+
+              let nextPoints = 0;
+              if (prediction.homeScore != null && prediction.awayScore != null) {
+                const pDiff = prediction.homeScore - prediction.awayScore;
+                const mDiff = predMatch.homeScore - predMatch.awayScore;
+                const isSecondRound = ['Octavos', 'Cuartos', 'Semis', '3er Puesto', 'Final'].includes(predMatch.round);
+                const multiplier = isSecondRound ? secondRoundMultiplier : 1;
+
+                if (prediction.homeScore === predMatch.homeScore) nextPoints += pointConfig.exact * multiplier;
+                if (prediction.awayScore === predMatch.awayScore) nextPoints += pointConfig.exact * multiplier;
+                if (pDiff === mDiff) nextPoints += pointConfig.difference * multiplier;
+                if (pDiff > 0 && mDiff > 0) nextPoints += pointConfig.winner * multiplier;
+                if (pDiff < 0 && mDiff < 0) nextPoints += pointConfig.winner * multiplier;
+                if (pDiff === 0 && mDiff === 0) nextPoints += pointConfig.winner * multiplier;
+              }
+
+              predictionUpdates.push({ id: prediction.id, points: nextPoints });
+            }
+
+            if (predictionUpdates.length > 0) {
+              // First update prediction points
+              await prisma.$transaction(
+                predictionUpdates.map(({ id, points }) =>
+                  prisma.prediction.update({ where: { id }, data: { points } })
+                )
+              );
+
+              // Then recalculate ALL participant points (sum all their finished predictions)
+              const participantUpdates = [];
+              for (const p of participants) {
+                const allPredictions = await prisma.prediction.findMany({
+                  where: { tournamentId, userId: p.userId },
+                });
+                const totalPoints = allPredictions.reduce((sum, pred) => sum + (pred.points || 0), 0);
+                participantUpdates.push(
+                  prisma.participant.update({
+                    where: { id: p.id },
+                    data: { points: totalPoints },
+                  })
+                );
+              }
+              await prisma.$transaction(participantUpdates);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Auto-recalculate points error:', err);
+      }
+    }
+    
     // Surgical version bump
     await prisma.meta.upsert({
       where: { id: 'matchesVersion' },

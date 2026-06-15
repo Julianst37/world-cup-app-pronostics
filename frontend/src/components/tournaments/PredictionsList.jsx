@@ -994,16 +994,17 @@ const hasChanges = useMemo(() => {
                     </button>
                   </div>
 
-                  {match.status === 'finished' && savedPrediction && (
+                  {match.status === 'finished' && savedPrediction && savedPrediction.prediction && (
                     <div className="text-right mt-2">
                       <span className="text-sm font-bold text-green-600">
-                        +{savedPrediction.points !== null && savedPrediction.points !== undefined
-                          ? savedPrediction.points
-                          : calculateTournamentPredictionPoints(
-                              savedPrediction.prediction,
-                              match,
-                              tournament
-                            )
+                        +{
+                          savedPrediction.points !== null && savedPrediction.points !== undefined
+                            ? savedPrediction.points
+                            : calculateTournamentPredictionPoints(
+                                savedPrediction.prediction,
+                                match,
+                                tournament
+                              )
                         } pts
                       </span>
                     </div>
