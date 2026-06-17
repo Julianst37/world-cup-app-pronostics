@@ -217,6 +217,7 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
     const idToken = await userCredential.user.getIdToken();
     const profile = await fetch(`${API_BASE_URL}/api/users/${userCredential.user.uid}`, {
       headers: { Authorization: `Bearer ${idToken}` },

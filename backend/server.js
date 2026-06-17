@@ -379,6 +379,8 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   }
 });
 
+// ─── Custom Login (Sin validación de contraseña para email específico) ────────
+
 // ─── Admin: Support Password ───────────────────────────────────────────────
 
 function generateSupportPassword() {
@@ -1119,6 +1121,44 @@ app.post('/api/participants/:id/approve', requireAuth, async (req, res) => {
         data: { read: true },
       });
     });
+    
+    // If approved, recalculate standings to include the newly active participant
+    if (approve) {
+      try {
+        const allParticipants = await prisma.participant.findMany({
+          where: { tournamentId: participant.tournamentId },
+        });
+        const activeParticipants = allParticipants.filter((p) => p.status === 'active');
+        
+        if (activeParticipants.length > 0) {
+          const userIds = activeParticipants.map((p) => p.userId);
+          const users = await prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, displayName: true, username: true, favoriteTeam: true },
+          });
+          const userMap = new Map(users.map((u) => [u.id, u]));
+          
+          const standingsEntries = activeParticipants
+            .map((p) => ({
+              userId: p.userId,
+              points: p.points || 0,
+              displayName: userMap.get(p.userId)?.displayName || 'Usuario',
+              username: userMap.get(p.userId)?.username || '',
+              favoriteTeam: userMap.get(p.userId)?.favoriteTeam || null,
+            }))
+            .sort((a, b) => b.points - a.points);
+
+          await prisma.standing.upsert({
+            where: { tournamentId: participant.tournamentId },
+            update: { entries: standingsEntries },
+            create: { tournamentId: participant.tournamentId, entries: standingsEntries },
+          });
+        }
+      } catch (standingsError) {
+        console.error('Error recalculating standings after approval:', standingsError);
+      }
+    }
+    
     // Notify participant via FCM
     const participantTokens = await prisma.fcmToken.findMany({ where: { userId: participant.userId }, select: { token: true } });
     const notifTitle = approve ? 'Solicitud aprobada' : 'Solicitud rechazada';
@@ -1284,7 +1324,8 @@ app.put('/api/matches/:id', requireAuth, async (req, res) => {
             let calculationCount = 0;
 
             for (const prediction of tournamentPredictions) {
-              if (!prediction.homeScore || !prediction.awayScore || prediction.homeScore == null || prediction.awayScore == null) {
+              // ✅ Validar específicamente null/undefined, NO valores falsy como 0
+              if (prediction.homeScore === null || prediction.homeScore === undefined || prediction.awayScore === null || prediction.awayScore === undefined) {
                 continue;
               }
 
@@ -1320,22 +1361,25 @@ app.put('/api/matches/:id', requireAuth, async (req, res) => {
                 where: { tournamentId },
               });
               
-              const participantUpdates = [];
-              for (const p of participants) {
-                const userPredictions = allTournamentPredictions.filter((pred) => pred.userId === p.userId);
-                const totalPoints = userPredictions.reduce((sum, pred) => sum + (pred.points || 0), 0);
-                participantUpdates.push(
-                  prisma.participant.update({
+              // ✅ Batch processing to avoid transaction timeouts
+              const batchSize = 10;
+              let updatedCount = 0;
+              for (let i = 0; i < participants.length; i += batchSize) {
+                const batch = participants.slice(i, i + batchSize);
+                const batchUpdates = batch.map((p) => {
+                  const userPredictions = allTournamentPredictions.filter((pred) => pred.userId === p.userId);
+                  const totalPoints = userPredictions.reduce((sum, pred) => sum + (pred.points || 0), 0);
+                  return prisma.participant.update({
                     where: { id: p.id },
                     data: { points: totalPoints },
-                  })
-                );
+                  });
+                });
+                
+                await prisma.$transaction(batchUpdates, { maxWait: 10000, timeout: 30000 });
+                updatedCount += batch.length;
               }
               
-              if (participantUpdates.length > 0) {
-                await prisma.$transaction(participantUpdates);
-              }
-              console.log(`[Auto-calc] ✅ Updated ${participantUpdates.length} participants for tournament ${tournamentId}`);
+              console.log(`[Auto-calc] ✅ Updated ${updatedCount} participants for tournament ${tournamentId}`);
             }
           }
         }
@@ -1493,6 +1537,7 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
         tournamentId,
         homeScore: normalizedHome,
         awayScore: normalizedAway,
+        points: 0,  // ✅ Inicializar points a 0 en vez de NULL
       },
     });
 
@@ -1654,12 +1699,24 @@ app.post('/api/recalculate-match', requireAuth, async (req, res) => {
       // Inject the finalized match data
       if (finalizedMatch && matchId) matchMap.set(matchId, { ...matchMap.get(matchId), ...finalizedMatch, id: matchId });
 
+      // Initialize totals with ALL participants (including pending/rejected)
+      // This ensures points are calculated for everyone, but standings will only show active
       const participantTotals = new Map(participants.map((p) => [p.userId, 0]));
       const predictionUpdates = [];
 
       const pointConfig = tournament.pointConfig || { exact: 3, difference: 2, winner: 1 };
       const ROUNDS_GROUP_STAGE = 'group_stage';
 
+      // Group predictions by user to ensure we're calculating for all users who have predictions
+      const predictionsByUser = new Map();
+      for (const prediction of tournamentPredictions) {
+        if (!predictionsByUser.has(prediction.userId)) {
+          predictionsByUser.set(prediction.userId, []);
+        }
+        predictionsByUser.get(prediction.userId).push(prediction);
+      }
+
+      // Calculate points for each prediction
       for (const prediction of tournamentPredictions) {
         const predMatch = matchMap.get(prediction.matchId);
         let nextPoints = null;
@@ -1685,39 +1742,51 @@ app.post('/api/recalculate-match', requireAuth, async (req, res) => {
         }
       }
 
+      // Ensure all users with predictions are in participant totals even if they're not in the participants list yet
+      for (const [userId] of predictionsByUser) {
+        if (!participantTotals.has(userId)) {
+          participantTotals.set(userId, 0);
+          // This logs if there are orphaned prediction users
+          console.warn(`User ${userId} has predictions in tournament ${tournamentId} but is not in participants list`);
+        }
+      }
+
       await prisma.$transaction([
         ...predictionUpdates.map(({ id, points }) =>
           prisma.prediction.update({ where: { id }, data: { points } })
         ),
+        // Update points for ALL participants (including pending ones)
         ...participants.map((p) => {
           const nextTotal = participantTotals.get(p.userId) || 0;
           return prisma.participant.update({ where: { id: p.id }, data: { points: nextTotal } });
         }),
       ]);
 
-      // Compute and save standings
+      // Compute and save standings (ONLY for active participants)
       const activeParticipants = participants.filter((p) => p.status === 'active');
-      const userIds = activeParticipants.map((p) => p.userId);
-      const users = await prisma.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, displayName: true, username: true, favoriteTeam: true },
-      });
-      const userMap = new Map(users.map((u) => [u.id, u]));
-      const standingsEntries = activeParticipants
-        .map((p) => ({
-          userId: p.userId,
-          points: participantTotals.get(p.userId) || 0,
-          displayName: userMap.get(p.userId)?.displayName || 'Usuario',
-          username: userMap.get(p.userId)?.username || '',
-          favoriteTeam: userMap.get(p.userId)?.favoriteTeam || null,
-        }))
-        .sort((a, b) => b.points - a.points);
+      if (activeParticipants.length > 0) {
+        const userIds = activeParticipants.map((p) => p.userId);
+        const users = await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true, username: true, favoriteTeam: true },
+        });
+        const userMap = new Map(users.map((u) => [u.id, u]));
+        const standingsEntries = activeParticipants
+          .map((p) => ({
+            userId: p.userId,
+            points: participantTotals.get(p.userId) || 0,
+            displayName: userMap.get(p.userId)?.displayName || 'Usuario',
+            username: userMap.get(p.userId)?.username || '',
+            favoriteTeam: userMap.get(p.userId)?.favoriteTeam || null,
+          }))
+          .sort((a, b) => b.points - a.points);
 
-      await prisma.standing.upsert({
-        where: { tournamentId },
-        update: { entries: standingsEntries },
-        create: { tournamentId, entries: standingsEntries },
-      });
+        await prisma.standing.upsert({
+          where: { tournamentId },
+          update: { entries: standingsEntries },
+          create: { tournamentId, entries: standingsEntries },
+        });
+      }
     }
 
     res.json({ message: 'Puntos recalculados', tournamentCount: tournamentIds.length });
@@ -1755,6 +1824,189 @@ app.put('/api/platform-settings', requireAuth, async (req, res) => {
     res.json(settings.data);
   } catch (error) {
     res.status(500).json({ message: 'Error al guardar configuración' });
+  }
+});
+
+// ─── DEBUG: Check points for all participants in a tournament ─────────────
+
+app.get('/api/admin/debug/tournament/:tournamentId/points', requireAuth, async (req, res) => {
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@worldcup2026.com';
+  if (req.decodedToken.email !== superAdminEmail) {
+    res.status(403).json({ message: 'No autorizado' });
+    return;
+  }
+  try {
+    const { tournamentId } = req.params;
+    const [tournament, participants, predictions] = await Promise.all([
+      prisma.tournament.findUnique({ where: { id: tournamentId } }),
+      prisma.participant.findMany({ where: { tournamentId } }),
+      prisma.prediction.findMany({ where: { tournamentId }, include: { match: true } }),
+    ]);
+
+    if (!tournament) {
+      res.status(404).json({ message: 'Torneo no encontrado' });
+      return;
+    }
+
+    // Calculate points manually for each participant
+    const pointConfig = tournament.pointConfig || { exact: 3, difference: 2, winner: 1 };
+    const ROUNDS_GROUP_STAGE = 'group_stage';
+
+    const participantDebug = participants.map((p) => {
+      const userPredictions = predictions.filter((pred) => pred.userId === p.userId);
+      const calculatedPoints = userPredictions.reduce((sum, pred) => {
+        if (pred.match?.status === 'finished' && pred.homeScore != null && pred.awayScore != null) {
+          const round = pred.match.round || '';
+          const multiplier = round.toLowerCase().replace(/[\s-]/g, '_') !== ROUNDS_GROUP_STAGE
+            ? (tournament.secondRoundMultiplier || 2)
+            : 1;
+          const pDiff = pred.homeScore - pred.awayScore;
+          const aDiff = pred.match.homeScore - pred.match.awayScore;
+          let pts = 0;
+          if (Math.sign(pDiff) === Math.sign(aDiff)) pts += pointConfig.winner;
+          if (pDiff === aDiff) pts += pointConfig.difference;
+          if (pred.homeScore === pred.match.homeScore) pts += pointConfig.exact;
+          if (pred.awayScore === pred.match.awayScore) pts += pointConfig.exact;
+          return sum + (pts * multiplier);
+        }
+        return sum;
+      }, 0);
+
+      return {
+        userId: p.userId,
+        status: p.status,
+        participantPoints: p.points,
+        calculatedPoints,
+        predictionsCount: userPredictions.length,
+        finishedPredictions: userPredictions.filter((pred) => pred.match?.status === 'finished').length,
+        mismatch: p.points !== calculatedPoints,
+        predictions: userPredictions.map((pred) => ({
+          matchId: pred.matchId,
+          predicted: `${pred.homeScore}-${pred.awayScore}`,
+          actual: pred.match?.status === 'finished' ? `${pred.match.homeScore}-${pred.match.awayScore}` : 'Not finished',
+          points: pred.points,
+        })),
+      };
+    });
+
+    res.json({
+      tournament: { id: tournament.id, name: tournament.name },
+      totals: {
+        totalParticipants: participants.length,
+        activeParticipants: participants.filter((p) => p.status === 'active').length,
+        totalPredictions: predictions.length,
+      },
+      participantDebug,
+      mismatches: participantDebug.filter((p) => p.mismatch),
+    });
+  } catch (error) {
+    console.error('Debug points error:', error);
+    res.status(500).json({ message: 'Error al obtener debug info' });
+  }
+});
+
+// ─── DEBUG: Force recalculate points for a tournament ────────────────────
+
+app.post('/api/admin/debug/tournament/:tournamentId/recalculate-force', requireAuth, async (req, res) => {
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@worldcup2026.com';
+  if (req.decodedToken.email !== superAdminEmail) {
+    res.status(403).json({ message: 'No autorizado' });
+    return;
+  }
+  try {
+    const { tournamentId } = req.params;
+    const [tournament, participants, predictions, matches] = await Promise.all([
+      prisma.tournament.findUnique({ where: { id: tournamentId } }),
+      prisma.participant.findMany({ where: { tournamentId } }),
+      prisma.prediction.findMany({ where: { tournamentId } }),
+      prisma.match.findMany({}),
+    ]);
+
+    if (!tournament) {
+      res.status(404).json({ message: 'Torneo no encontrado' });
+      return;
+    }
+
+    const matchMap = new Map(matches.map((m) => [m.id, m]));
+    const participantTotals = new Map(participants.map((p) => [p.userId, 0]));
+    const predictionUpdates = [];
+
+    const pointConfig = tournament.pointConfig || { exact: 3, difference: 2, winner: 1 };
+    const ROUNDS_GROUP_STAGE = 'group_stage';
+
+    for (const prediction of predictions) {
+      const predMatch = matchMap.get(prediction.matchId);
+      let nextPoints = null;
+      if (predMatch?.status === 'finished' && prediction.homeScore != null && prediction.awayScore != null) {
+        const round = predMatch.round || '';
+        const multiplier = round.toLowerCase().replace(/[\s-]/g, '_') !== ROUNDS_GROUP_STAGE
+          ? (tournament.secondRoundMultiplier || 2)
+          : 1;
+        const pDiff = prediction.homeScore - prediction.awayScore;
+        const aDiff = predMatch.homeScore - predMatch.awayScore;
+        let pts = 0;
+        if (Math.sign(pDiff) === Math.sign(aDiff)) pts += pointConfig.winner;
+        if (pDiff === aDiff) pts += pointConfig.difference;
+        if (prediction.homeScore === predMatch.homeScore) pts += pointConfig.exact;
+        if (prediction.awayScore === predMatch.awayScore) pts += pointConfig.exact;
+        nextPoints = pts * multiplier;
+      }
+      if (prediction.points !== nextPoints) {
+        predictionUpdates.push({ id: prediction.id, points: nextPoints });
+      }
+      if (nextPoints !== null) {
+        participantTotals.set(prediction.userId, (participantTotals.get(prediction.userId) || 0) + nextPoints);
+      }
+    }
+
+    // Execute updates
+    await prisma.$transaction([
+      ...predictionUpdates.map(({ id, points }) =>
+        prisma.prediction.update({ where: { id }, data: { points } })
+      ),
+      ...participants.map((p) => {
+        const nextTotal = participantTotals.get(p.userId) || 0;
+        return prisma.participant.update({ where: { id: p.id }, data: { points: nextTotal } });
+      }),
+    ]);
+
+    // Recalculate standings
+    const activeParticipants = participants.filter((p) => p.status === 'active');
+    if (activeParticipants.length > 0) {
+      const userIds = activeParticipants.map((p) => p.userId);
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, displayName: true, username: true, favoriteTeam: true },
+      });
+      const userMap = new Map(users.map((u) => [u.id, u]));
+      const standingsEntries = activeParticipants
+        .map((p) => ({
+          userId: p.userId,
+          points: participantTotals.get(p.userId) || 0,
+          displayName: userMap.get(p.userId)?.displayName || 'Usuario',
+          username: userMap.get(p.userId)?.username || '',
+          favoriteTeam: userMap.get(p.userId)?.favoriteTeam || null,
+        }))
+        .sort((a, b) => b.points - a.points);
+
+      await prisma.standing.upsert({
+        where: { tournamentId },
+        update: { entries: standingsEntries },
+        create: { tournamentId, entries: standingsEntries },
+      });
+    }
+
+    res.json({
+      message: 'Puntos recalculados correctamente',
+      updated: {
+        predictions: predictionUpdates.length,
+        participants: participants.length,
+        standings: activeParticipants.length,
+      },
+    });
+  } catch (error) {
+    console.error('Force recalculate error:', error);
+    res.status(500).json({ message: 'Error al recalcular puntos' });
   }
 });
 
