@@ -1380,6 +1380,46 @@ app.put('/api/matches/:id', requireAuth, async (req, res) => {
               }
               
               console.log(`[Auto-calc] ✅ Updated ${updatedCount} participants for tournament ${tournamentId}`);
+              
+              // ✅ Regenerate standings table after updating participant points
+              try {
+                const activeParticipants = participants.filter((p) => p.status === 'active');
+                
+                if (activeParticipants.length > 0) {
+                  const userIds = activeParticipants.map((p) => p.userId);
+                  const users = await prisma.user.findMany({
+                    where: { id: { in: userIds } },
+                    select: { id: true, displayName: true, username: true, favoriteTeam: true },
+                  });
+                  const userMap = new Map(users.map((u) => [u.id, u]));
+                  
+                  // Fetch updated participant data
+                  const updatedParticipants = await prisma.participant.findMany({
+                    where: { tournamentId },
+                  });
+                  
+                  const standingsEntries = updatedParticipants
+                    .filter((p) => p.status === 'active')
+                    .map((p) => ({
+                      userId: p.userId,
+                      points: p.points || 0,
+                      displayName: userMap.get(p.userId)?.displayName || 'Usuario',
+                      username: userMap.get(p.userId)?.username || '',
+                      favoriteTeam: userMap.get(p.userId)?.favoriteTeam || null,
+                    }))
+                    .sort((a, b) => b.points - a.points);
+
+                  await prisma.standing.upsert({
+                    where: { tournamentId },
+                    update: { entries: standingsEntries },
+                    create: { tournamentId, entries: standingsEntries },
+                  });
+                  
+                  console.log(`[Auto-calc] 📊 Standings table updated for tournament ${tournamentId}`);
+                }
+              } catch (standingsError) {
+                console.error('Error updating standings after match finalization:', standingsError);
+              }
             }
           }
         }
