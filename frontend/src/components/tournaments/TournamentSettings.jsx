@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useTournaments } from '../../hooks/useTournaments';
 import { useMatches } from '../../hooks/useMatches';
 import { useAuth } from '../../contexts/AuthContext';
+import { SUPER_ADMIN_EMAIL } from '../../utils/constants';
 import Modal from '../common/Modal';
 import { getRoundDisplayName } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -41,7 +42,7 @@ export default function TournamentSettings() {
   });
   const predictionLockTooltip = `El usuario podrá ingresar su pronóstico hasta ${formData.predictionLockMinutes || 10} minutos antes del partido`;
 
-  const isAdmin = tournament?.adminId === currentUser?.uid;
+  const isAdmin = tournament?.adminId === currentUser?.uid || currentUser?.email === SUPER_ADMIN_EMAIL;
   const hasFinishedMatches = matches.some((m) => m.status === 'finished');
   const groupStageExample = matches.find((match) => match.round === 'Group Stage') || matches[0] || null;
   const secondRoundExample = matches.find((match) => match.round && match.round !== 'Group Stage') || null;

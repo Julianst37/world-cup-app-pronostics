@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, NavLink, Outlet, Link } from 'react-router-dom';
+import { useParams, NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTournaments } from '../../hooks/useTournaments';
 import { useAuth } from '../../contexts/AuthContext';
+import { SUPER_ADMIN_EMAIL } from '../../utils/constants';
 import Loading from '../common/Loading';
 import Error from '../common/Error';
 import { Home, ClipboardList, Trophy, Users, Settings, Lock, ShieldOff } from 'lucide-react';
@@ -10,10 +11,12 @@ export default function TournamentDetail() {
   const { tournamentId } = useParams();
   const { getTournament } = useTournaments();
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [tournament, setTournament] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notMember, setNotMember] = useState(false);
+  const [isSuperAdminAccess, setIsSuperAdminAccess] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -21,18 +24,27 @@ export default function TournamentDetail() {
         const data = await getTournament(tournamentId);
         if (!data) throw new Error('Polla no encontrada');
         setTournament(data);
+        setLoading(false);
       } catch (err) {
-        if (err.code === 'NOT_A_MEMBER') {
+        // Super admin can access standings only for tournaments they're not a member of
+        if (err.code === 'NOT_A_MEMBER' && currentUser?.email === SUPER_ADMIN_EMAIL) {
+          // Create a minimal tournament object for standings-only access
+          setTournament({ id: tournamentId, name: 'Polla' });
+          setIsSuperAdminAccess(true);
+          setLoading(false);
+          // Redirect to standings immediately
+          navigate(`/tournaments/${tournamentId}/standings`, { replace: true });
+        } else if (err.code === 'NOT_A_MEMBER') {
           setNotMember(true);
+          setLoading(false);
         } else {
           setError(err.message);
+          setLoading(false);
         }
-      } finally {
-        setLoading(false);
       }
     };
     load();
-  }, [tournamentId, getTournament]);
+  }, [tournamentId, getTournament, currentUser, navigate]);
 
   if (loading) return <Loading />;
   if (error) return <Error message={error} />;
@@ -104,12 +116,46 @@ export default function TournamentDetail() {
   }
 
   const isAdmin = tournament?.adminId === currentUser?.uid;
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  
+  // Super admin accessing tournament they're not a member of: only show Standings
+  if (isSuperAdminAccess) {
+    return (
+      <div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-4 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-800 to-indigo-700 p-6 text-white text-center">
+            <h1 className="text-2xl font-bold">{tournament?.name}</h1>
+            <p className="text-blue-200 mt-1 text-sm">Vista de Posiciones</p>
+          </div>
+
+          <div className="flex overflow-x-auto border-b border-gray-200">
+            <NavLink
+              to="standings"
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-5 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition ${
+                  isActive
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`
+              }
+            >
+              <Trophy className="w-4 h-4" />
+              Posiciones
+            </NavLink>
+          </div>
+        </div>
+
+        <Outlet context={{ tournament, setTournament }} />
+      </div>
+    );
+  }
+  
   const tabs = [
     { to: 'home', label: 'Inicio', Icon: Home },
     { to: 'predictions', label: 'Pronósticos', Icon: ClipboardList },
     { to: 'standings', label: 'Posiciones', Icon: Trophy },
-    ...(isAdmin ? [{ to: 'participants', label: 'Participantes', Icon: Users }] : []),
-    ...(isAdmin ? [{ to: 'settings', label: 'Configuración', Icon: Settings }] : []),
+    ...(isAdmin || isSuperAdmin ? [{ to: 'participants', label: 'Participantes', Icon: Users }] : []),
+    ...(isAdmin || isSuperAdmin ? [{ to: 'settings', label: 'Configuración', Icon: Settings }] : []),
   ];
 
   return (

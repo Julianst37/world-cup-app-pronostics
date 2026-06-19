@@ -260,7 +260,7 @@ const handleGoBack = () => {
                 )}
                 {pred.noPrediction ? (
                   <span className="text-right text-sm text-gray-300">—</span>
-                ) : pred.points !== null ? (
+                ) : pred.points != null && pred.points > 0 ? (
                   <span className="text-right text-sm font-medium text-green-600 tabular-nums">{pred.points} pts</span>
                 ) : (
                   <span className="text-right text-sm text-gray-400">-</span>

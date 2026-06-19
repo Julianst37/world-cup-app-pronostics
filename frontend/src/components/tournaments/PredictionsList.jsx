@@ -16,6 +16,38 @@ import { PLAYOFF_ROUNDS, ROUNDS } from '../../utils/constants';
 
 const ITEMS_PER_PAGE = 10;
 
+// Helper: Convertir string de fecha (YYYY-MM-DD) a string formateado en local
+const formatDateLocal = (dateString) => {
+  if (!dateString || dateString === 'all') return dateString;
+  // dateString es 'YYYY-MM-DD' que representa una fecha local
+  const [year, month, day] = dateString.split('-');
+  const date = new Date(year, parseInt(month) - 1, parseInt(day));
+  return date.toLocaleDateString('es-CO', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+// Helper: Obtener fecha actual en zona horaria local (YYYY-MM-DD)
+const getTodayDateLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Helper: Convertir string de fecha (YYYY-MM-DD UTC) a fecha local (YYYY-MM-DD)
+const getLocalDateString = (dateString) => {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Leer filtros guardados desde sessionStorage (para inicialización lazy)
 const getInitialFilters = () => {
   try {
@@ -25,14 +57,21 @@ const getInitialFilters = () => {
       return {
         round: parsed.round || 'all',
         group: parsed.group || 'all',
-        date: parsed.date || 'all',
+        date: parsed.date || getTodayDateLocal(),
         predictionStatus: parsed.predictionStatus || 'all',
         showFavorites: parsed.showFavorites || false,
         page: parsed.page || 1,
       };
     }
   } catch (_) {}
-  return { round: 'all', group: 'all', date: 'all', predictionStatus: 'all', showFavorites: false, page: 1 };
+  return { 
+    round: 'all', 
+    group: 'all', 
+    date: getTodayDateLocal(), 
+    predictionStatus: 'all', 
+    showFavorites: false, 
+    page: 1 
+  };
 };
 
 // Función para obtener últimos 3 resultados del equipo
@@ -157,8 +196,11 @@ export default function PredictionsList() {
     }
 
     if (filterDate !== 'all') {
-      const matchDate = new Date(filterDate).toDateString();
-      result = result.filter((m) => new Date(m.date).toDateString() === matchDate);
+      const selectedDateLocal = getLocalDateString(filterDate);
+      result = result.filter((m) => {
+        const matchDateLocal = getLocalDateString(m.date);
+        return matchDateLocal === selectedDateLocal;
+      });
     }
 
     if (filterPredictionStatus !== 'all') {
@@ -282,7 +324,15 @@ useEffect(() => {
       return a.localeCompare(b);
     });
   }, [globallyAvailableMatches]);
-  const dates = ['all', ...new Set(globallyAvailableMatches.map((m) => new Date(m.date).toISOString().split('T')[0]))];
+  
+  const dates = useMemo(() => {
+    const uniqueDates = [...new Set(globallyAvailableMatches.map((m) => getLocalDateString(m.date)).filter(Boolean))];
+    return ['all', ...uniqueDates].sort((a, b) => {
+      if (a === 'all') return -1;
+      if (b === 'all') return 1;
+      return a.localeCompare(b);
+    });
+  }, [globallyAvailableMatches]);
 
   const handleFilterChange = (setter, value) => {
     setter(value);
@@ -795,11 +845,7 @@ const hasChanges = useMemo(() => {
                 <option key={date} value={date}>
                   {date === 'all'
                     ? 'Todas las fechas'
-                    : new Date(date).toLocaleDateString('es-CO', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
+                    : formatDateLocal(date)}
                 </option>
               ))}
             </select>

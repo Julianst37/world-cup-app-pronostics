@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { SUPER_ADMIN_EMAIL } from '../../utils/constants';
 import { useUsers } from '../../hooks/useUsers';
 import { loadParticipants, invalidateParticipantsCache } from '../../hooks/participantsCache';
 import { invalidateTournamentsCache } from '../../hooks/useTournaments';
@@ -42,7 +43,7 @@ export default function Participants() {
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, name }
   const [deleting, setDeleting] = useState(false);
 
-  const isAdmin = tournament?.adminId === currentUser?.uid;
+  const isAdmin = tournament?.adminId === currentUser?.uid || currentUser?.email === SUPER_ADMIN_EMAIL;
 
   useEffect(() => {
     if (!tournament?.id) return;

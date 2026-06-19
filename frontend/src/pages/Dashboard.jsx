@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournaments } from '../hooks/useTournaments';
+import { SUPER_ADMIN_EMAIL } from '../utils/constants';
 import Loading from '../components/common/Loading';
 import Modal from '../components/common/Modal';
 import toast from 'react-hot-toast';
-import { Trophy, Users, Link2, ArrowRight, Trash2, AlertTriangle, LogOut } from 'lucide-react';
+import { Trophy, Users, Link2, ArrowRight, Trash2, AlertTriangle, LogOut, Lock } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
@@ -21,6 +22,12 @@ export default function Dashboard() {
   const [deleting, setDeleting] = useState(false);
   const [tournamentToLeave, setTournamentToLeave] = useState(null);
   const [leaving, setLeaving] = useState(false);
+  
+  // Super Admin: Load all tournaments
+  const [allTournaments, setAllTournaments] = useState([]);
+  const [loadingAllTournaments, setLoadingAllTournaments] = useState(false);
+  const [allTournamentsLoaded, setAllTournamentsLoaded] = useState(false);
+  
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -33,6 +40,31 @@ export default function Dashboard() {
       setSearchParams({}, { replace: true });
     }
   }, []);
+
+  // Load all tournaments if super admin
+  useEffect(() => {
+    if (!currentUser || currentUser.email !== SUPER_ADMIN_EMAIL || allTournamentsLoaded) return;
+    
+    setLoadingAllTournaments(true);
+    const fetchAllTournaments = async () => {
+      try {
+        const idToken = await currentUser.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/api/admin/tournaments`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        setAllTournaments(data);
+        setAllTournamentsLoaded(true);
+      } catch {
+        toast.error('Error al cargar las pollas');
+      } finally {
+        setLoadingAllTournaments(false);
+      }
+    };
+    
+    fetchAllTournaments();
+  }, [currentUser, allTournamentsLoaded]);
 
   const handleJoin = async (e) => {
     e.preventDefault();
@@ -259,6 +291,81 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Super Admin: All Tournaments Section */}
+      {currentUser?.email === SUPER_ADMIN_EMAIL && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Lock className="w-5 h-5 text-purple-600" />
+            <h2 className="text-xl font-bold text-gray-800">
+              Todas las Pollas ({allTournaments.length})
+            </h2>
+          </div>
+          {loadingAllTournaments ? (
+            <div className="py-16 flex justify-center"><Loading /></div>
+          ) : allTournaments.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+              <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">No hay pollas aún</h3>
+              <p className="text-gray-500">Crea la primera polla en el sistema</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {allTournaments.map((tournament) => (
+                <div
+                  key={tournament.id}
+                  onClick={() => {
+                    navigate(`/tournaments/${tournament.id}/home`);
+                  }}
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-purple-300 hover:shadow-md cursor-pointer transition"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${
+                            tournament.status === 'inactive' ? 'bg-red-500' : 'bg-green-500'
+                          }`}
+                        />
+                        <h3 className="font-bold text-gray-800 text-lg">{tournament.name}</h3>
+                      </div>
+                      {tournament.description && (
+                        <p className="text-gray-500 text-sm mt-1 line-clamp-1">{tournament.description}</p>
+                      )}
+                      <div className="flex items-center gap-4 mt-2 flex-wrap">
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <Users className="w-3 h-3" /> {tournament.memberCount} participantes
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            tournament.status === 'inactive'
+                              ? 'bg-red-100 text-red-700'
+                              : tournament.status === 'finished'
+                              ? 'bg-gray-100 text-gray-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}
+                        >
+                          {tournament.status === 'inactive'
+                            ? 'Inactivo'
+                            : tournament.status === 'finished'
+                            ? 'Finalizado'
+                            : 'Activo'}
+                        </span>
+                        {tournament.adminId && (
+                          <span className="text-xs text-gray-500">
+                            Admin: {tournament.adminName || tournament.adminId}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <Modal
