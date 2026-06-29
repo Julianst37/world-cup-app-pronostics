@@ -1332,7 +1332,7 @@ app.put('/api/matches/:id', requireAuth, async (req, res) => {
               let nextPoints = 0;
               const pDiff = prediction.homeScore - prediction.awayScore;
               const mDiff = homeScore - awayScore;
-              const isSecondRound = ['Octavos', 'Cuartos', 'Semis', '3er Puesto', 'Final'].includes(match.round);
+              const isSecondRound = (match.round || '').toLowerCase().replace(/[\s-]/g, '_') !== 'group_stage';
               const multiplier = isSecondRound ? secondRoundMultiplier : 1;
 
               if (prediction.homeScore === homeScore) nextPoints += pointConfig.exact * multiplier;
